@@ -9,7 +9,7 @@ from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests_html import AsyncHTMLSession
 
 from app import constants as consts
-from app.analysis import calculate_quality, looking_for_value
+from app.analysis import analyze_match_odds, calculate_quality
 from app.config import Config, ConfigurationError, load_config
 from app.scrapers.betexplorer import Scraper
 from app.scrapers.natural_stat_trick import XGData, get_xg_data_for_all_teams
@@ -90,24 +90,24 @@ def analyze_single_match(url: str, config: Config, home: XGData, away: XGData) -
         print(consts.ERROR_NO_ANY_LINES_ODDS_FOR_MATCH)
         return
 
-    nhl_match.team_a.xGF, nhl_match.team_a.xGA = home.get(nhl_match.team_a.name, (0.0, 0.0))
-    nhl_match.team_b.xGF, nhl_match.team_b.xGA = away.get(nhl_match.team_b.name, (0.0, 0.0))
+    nhl_match.team_a.xgf, nhl_match.team_a.xga = home.get(nhl_match.team_a.name, (0.0, 0.0))
+    nhl_match.team_b.xgf, nhl_match.team_b.xga = away.get(nhl_match.team_b.name, (0.0, 0.0))
     if (
-        nhl_match.team_a.xGF > 0.0
-        and nhl_match.team_a.xGA > 0.0
-        and nhl_match.team_b.xGA > 0.0
-        and nhl_match.team_b.xGF > 0.0
+        nhl_match.team_a.xgf > 0.0
+        and nhl_match.team_a.xga > 0.0
+        and nhl_match.team_b.xga > 0.0
+        and nhl_match.team_b.xgf > 0.0
     ):
         print("Calculating...")
-        quality_home = calculate_quality(nhl_match.team_a.xGF, nhl_match.team_b.xGA)
-        quality_away = calculate_quality(nhl_match.team_b.xGF, nhl_match.team_a.xGA)
+        quality_home = calculate_quality(nhl_match.team_a.xgf, nhl_match.team_b.xga)
+        quality_away = calculate_quality(nhl_match.team_b.xgf, nhl_match.team_a.xga)
         print(f"Team quality: {quality_home} - {quality_away}")
         poisson = Poisson(quality_home, quality_away)
-        looking_for_value(nhl_match, poisson, config)
+        analyze_match_odds(nhl_match, poisson, config)
     else:
-        if not nhl_match.team_a.xGF and not nhl_match.team_a.xGA:
+        if not nhl_match.team_a.xgf and not nhl_match.team_a.xga:
             print(consts.ERROR_NO_XG_DATA_FOR_HOME)
-        if not nhl_match.team_b.xGA and not nhl_match.team_b.xGF:
+        if not nhl_match.team_b.xga and not nhl_match.team_b.xgf:
             print(consts.ERROR_NO_XG_DATA_FOR_AWAY)
 
 

@@ -30,7 +30,7 @@ async def get_xg_data_for_all_teams(
         use_proxy: Whether to apply the configured proxy, as chosen in the CLI.
 
     Returns:
-        Team names mapped to xGF and xGA for teams meeting the sample minimum.
+        Team names mapped to xgf and xga for teams meeting the sample minimum.
 
     Raises:
         ConfigurationError: Proxy use was requested without a configured URL.

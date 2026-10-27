@@ -1,7 +1,8 @@
-"""Typed team and match models preserving the legacy public attributes."""
+"""Typed team and match data with explicit stats output."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -9,48 +10,28 @@ if TYPE_CHECKING:
     from poisson_odds import BookmakerHandicap, BookmakerMoneyline, BookmakerTotal
 
 
+@dataclass(eq=False)
 class Team:
     """A team and its venue-specific expected goals.
 
     Attributes:
         name: Source team name.
-        xGF: Expected goals for; zero when not assigned.
-        xGA: Expected goals against; zero when not assigned.
+        xgf: Expected goals for; zero when not assigned.
+        xga: Expected goals against; zero when not assigned.
     """
 
-    def __init__(self, name: str) -> None:
-        self.__name = name
-        self.__xGF = 0.0
-        self.__xGA = 0.0
-
-    @property
-    def name(self) -> str:
-        return self.__name
-
-    @property
-    def xGF(self) -> float:
-        return self.__xGF
-
-    @xGF.setter
-    def xGF(self, xGF: float) -> None:
-        self.__xGF = xGF
-
-    @property
-    def xGA(self) -> float:
-        return self.__xGA
-
-    @xGA.setter
-    def xGA(self, xGA: float) -> None:
-        self.__xGA = xGA
+    name: str
+    xgf: float = 0.0
+    xga: float = 0.0
 
     def __str__(self) -> str:
-        result_with_xG = f"{self.__name} ({self.__xGF}|{self.__xGA})"
-        result_without_xG = f"{self.__name}"
-        return result_with_xG if self.__xGF and self.__xGA else result_without_xG
+        """Include xG only when both values are truthy, as in the original CLI."""
+        return f"{self.name} ({self.xgf}|{self.xga})" if self.xgf and self.xga else f"{self.name}"
 
 
+@dataclass(eq=False)
 class NHLMatch:
-    """A match with the original three-way, handicap, and total markets.
+    """A match with the existing poisson_odds bookmaker market types.
 
     Attributes:
         date: Source kickoff date and time as a formatted string.
@@ -58,74 +39,29 @@ class NHLMatch:
         team_b: Away team.
         url: BetExplorer match URL.
         bookmaker_moneyline: Three-way odds, or None if no rows were found.
-        bookmaker_handicaps: Selected handicap markets.
-        bookmaker_totals: Selected total markets.
+        bookmaker_handicaps: Selected handicap markets, owned by this match.
+        bookmaker_totals: Selected total markets, owned by this match.
     """
 
-    def __init__(
-        self,
-        date: str,
-        team_a: Team,
-        team_b: Team,
-        url: str,
-        bookmaker_moneyline: BookmakerMoneyline | None,
-    ) -> None:
-        self.__date = date
-        self.__team_a = team_a
-        self.__team_b = team_b
-        self.__url = url
-
-        self.__bookmaker_moneyline = bookmaker_moneyline  # BookmakerMoneyline
-        self.__bookmaker_handicaps: list[BookmakerHandicap] = []
-        self.__bookmaker_totals: list[BookmakerTotal] = []
-
-    @property
-    def date(self) -> str:
-        return self.__date
-
-    @property
-    def team_a(self) -> Team:
-        return self.__team_a
-
-    @property
-    def team_b(self) -> Team:
-        return self.__team_b
-
-    @property
-    def url(self) -> str:
-        return self.__url
-
-    @property
-    def bookmaker_moneyline(self) -> BookmakerMoneyline | None:
-        return self.__bookmaker_moneyline
-
-    @property
-    def bookmaker_handicaps(self) -> list[BookmakerHandicap]:
-        return self.__bookmaker_handicaps
-
-    @bookmaker_handicaps.setter
-    def bookmaker_handicaps(self, bookmaker_handicaps: list[BookmakerHandicap]) -> None:
-        self.__bookmaker_handicaps = bookmaker_handicaps
-
-    @property
-    def bookmaker_totals(self) -> list[BookmakerTotal]:
-        return self.__bookmaker_totals
-
-    @bookmaker_totals.setter
-    def bookmaker_totals(self, bookmaker_totals: list[BookmakerTotal]) -> None:
-        self.__bookmaker_totals = bookmaker_totals
+    date: str
+    team_a: Team
+    team_b: Team
+    url: str
+    bookmaker_moneyline: BookmakerMoneyline | None
+    bookmaker_handicaps: list[BookmakerHandicap] = field(default_factory=list)
+    bookmaker_totals: list[BookmakerTotal] = field(default_factory=list)
 
     def __str__(self) -> str:
-        return "{} {} - {}.".format(self.__date, self.__team_a, self.__team_b)
+        """Return the original date and team summary, including the final period."""
+        return f"{self.date} {self.team_a} - {self.team_b}."
 
     def save_to_stats(self, message: str, path: Path) -> None:
-        """Append the match and selected markets using the existing text format.
+        """Append the match and report without creating parent directories.
 
         Args:
-            message: Description of markets meeting the value threshold.
-            path: Resolved Config.stats_file; its parent directory must already exist.
+            message: Report text, including any existing trailing newline.
+            path: Explicit Config.stats_file supplied by the caller.
         """
-        result = self.__str__() + "\n" + message + "\n"
-
-        with path.open("a", encoding="utf-8") as f:
-            f.write(result)
+        result = f"{self}\n{message}\n"
+        with path.open("a", encoding="utf-8") as file:
+            file.write(result)
