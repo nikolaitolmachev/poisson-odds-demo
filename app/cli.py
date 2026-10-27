@@ -1,4 +1,4 @@
-"""Interactive CLI preserving the original menu and calculation workflow."""
+"""Run the interactive CLI for NHL match analysis."""
 
 from __future__ import annotations
 
@@ -27,14 +27,14 @@ if TYPE_CHECKING:
 
 
 async def load_xgs(config: Config, use_proxy: bool) -> tuple[XGData, XGData]:
-    """Load cached xG or refresh both venues, with stale fallback on retrieval errors.
+    """Load cached xG data or refresh both datasets, using stale data if needed.
 
     Args:
         config: Application settings shared by both requests.
         use_proxy: Whether the user selected proxy use.
 
     Returns:
-        Home and away xG dictionaries with the two legacy name replacements.
+        Home and away xG dictionaries with normalized team names.
 
     Raises:
         ConfigurationError: Proxy use was requested without a configured URL.
@@ -91,7 +91,7 @@ async def load_xgs(config: Config, use_proxy: bool) -> tuple[XGData, XGData]:
 
 
 def analyze_all_matches(config: Config, home: XGData, away: XGData) -> bool:
-    """Analyze all upcoming matches with the original sequential workflow.
+    """Analyze upcoming NHL matches one at a time.
 
     Args:
         config: Validated application settings.
@@ -99,7 +99,7 @@ def analyze_all_matches(config: Config, home: XGData, away: XGData) -> bool:
         away: Cached away xG data.
 
     Returns:
-        Whether every match was processed successfully.
+        True if every match was processed successfully or no matches were found.
     """
     print("=" * 100)
     try:
@@ -132,7 +132,7 @@ def analyze_all_matches(config: Config, home: XGData, away: XGData) -> bool:
 
 
 def analyze_single_match(url: str, config: Config, home: XGData, away: XGData) -> bool:
-    """Process one match and report expected integration failures.
+    """Analyze one NHL match and report expected scraping or file errors.
 
     Args:
         url: BetExplorer match URL.
@@ -154,7 +154,7 @@ def analyze_single_match(url: str, config: Config, home: XGData, away: XGData) -
 
 
 def _analyze_single_match(url: str, config: Config, home: XGData, away: XGData) -> bool:
-    """Scrape a match and apply the unchanged strength and market calculations.
+    """Retrieve an NHL match, calculate team strength, and compare market odds.
 
     Args:
         url: BetExplorer match URL.
@@ -204,7 +204,7 @@ def _analyze_single_match(url: str, config: Config, home: XGData, away: XGData) 
 
 
 def _is_match_url(url: str) -> bool:
-    """Check the scheme, BetExplorer hostname and nonempty NHL match path."""
+    """Check the scheme, BetExplorer hostname, and nonempty NHL match path."""
     try:
         parsed = urlsplit(url)
         prefix = consts.NHL_MATCH_PATH_PREFIX
@@ -219,7 +219,7 @@ def _is_match_url(url: str) -> bool:
 
 
 def main() -> int:
-    """Load configuration once and run the existing interactive menu.
+    """Load configuration and run the interactive menu.
 
     Returns:
         Zero on success, or one if any requested operation failed.

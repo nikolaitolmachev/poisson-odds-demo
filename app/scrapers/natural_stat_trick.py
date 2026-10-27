@@ -17,7 +17,7 @@ XGData = dict[str, tuple[float, float]]
 
 
 def _parse_xg_data(document: str, minimum_games: int) -> XGData:
-    """Parse the existing team table and reject incomplete or invalid statistics."""
+    """Parse the team table and reject incomplete or invalid statistics."""
     if not document or not document.strip():
         raise ValueError("Natural Stat Trick returned an empty HTML document.")
     tree = html.fromstring(document)
@@ -70,7 +70,7 @@ async def get_xg_data_for_all_teams(
     side: Literal["home", "away"] = "home",
     use_proxy: bool = False,
 ) -> XGData:
-    """Fetch venue-specific xG without changing shared HTTP-session settings.
+    """Fetch home or away xG data without changing shared HTTP session settings.
 
     Args:
         asession: HTTP session owned by the caller.
@@ -79,13 +79,14 @@ async def get_xg_data_for_all_teams(
         use_proxy: Whether to apply the configured proxy to this request.
 
     Returns:
-        Source team names mapped to xgf and xga for teams meeting the sample minimum.
+        Source team names mapped to (xgf, xga) pairs for teams meeting the
+        minimum number of games.
         The CLI retains responsibility for normalizing team names.
 
     Raises:
         ConfigurationError: Proxy use was requested without a configured URL.
         requests.exceptions.HTTPError: The source returned an unsuccessful HTTP status.
-        ValueError: Statistics are missing, malformed or fail numeric validation, or
+        ValueError: Statistics are missing, malformed, or contain invalid numbers, or
             no teams meet the configured minimum number of games.
     """
     if use_proxy and not config.proxy:

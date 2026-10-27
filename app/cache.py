@@ -1,4 +1,4 @@
-"""Read validated xG snapshots and replace their JSON cache atomically."""
+"""Read validated xG data and save it atomically to a JSON cache."""
 
 from __future__ import annotations
 
@@ -22,17 +22,26 @@ CACHE_FILENAME = "xg_cache.json"
 
 @dataclass(frozen=True)
 class XGCache:
-    """A complete, validated snapshot with its original UTC retrieval time."""
+    """A complete, validated xG snapshot.
+
+    Attributes:
+        retrieved_at: Original retrieval time in UTC.
+        home: Home xG pairs keyed by normalized team name.
+        away: Away xG pairs keyed by normalized team name.
+    """
 
     retrieved_at: datetime
     home: XGData
     away: XGData
 
     def is_fresh(self, now: datetime) -> bool:
-        """Return whether the snapshot is less than CACHE_TTL hours old.
+        """Return whether the snapshot is less than CACHE_TTL_HOURS hours old.
 
         Args:
             now: Current timezone-aware UTC time.
+
+        Returns:
+            True if the age is nonnegative and below the cache time limit.
         """
         return timedelta(0) <= now - self.retrieved_at < timedelta(hours=CACHE_TTL_HOURS)
 
@@ -66,7 +75,8 @@ def read_xg_cache(minimal_matches_to_count: int) -> XGCache | None:
         minimal_matches_to_count: Required sample size for the current run.
 
     Returns:
-        A validated snapshot, or None for unreadable, invalid or mismatched data.
+        A validated snapshot, or None if the data is unreadable, invalid, or
+        uses a different minimum number of games.
     """
     path = _application_directory() / CACHE_FILENAME
     try:
@@ -106,10 +116,10 @@ def save_xg_cache(home: XGData, away: XGData, minimal_matches_to_count: int) -> 
     Args:
         home: Home xG pairs after team-name normalization.
         away: Away xG pairs after team-name normalization.
-        minimal_matches_to_count: Sample size used to retrieve both datasets.
+        minimal_matches_to_count: Minimum number of games used to filter both datasets.
 
     Raises:
-        OSError: Cache creation, writing or replacement failed; the caller may continue
+        OSError: Cache creation, writing, or replacement failed. The caller may continue
             using the freshly retrieved data.
     """
     if _validate_dataset(home) is None or _validate_dataset(away) is None:

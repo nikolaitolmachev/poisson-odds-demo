@@ -1,4 +1,4 @@
-"""Load validated configuration from environment variables and a local .env."""
+"""Load and validate settings from environment variables and a .env file."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from dotenv.parser import parse_stream
 
 
 class ConfigurationError(ValueError):
-    """Indicate invalid application configuration without exposing secrets."""
+    """Report invalid application configuration without exposing secrets."""
 
 
 def _application_directory() -> Path:
@@ -40,7 +40,7 @@ class Config:
     stats_file: Path = Path("stats.txt")
 
     def __post_init__(self) -> None:
-        """Validate settings, including instances constructed without .env."""
+        """Validate settings and resolve a relative report path."""
         if self.minimal_matches_to_count < 1:
             raise ConfigurationError("MINIMAL_MATCHES_TO_COUNT must be at least 1.")
         if self.model_value_difference < 0:
@@ -95,12 +95,13 @@ def _read_env_file(path: Path) -> dict[str, str]:
 
 
 def load_config() -> Config:
-    """Load application-directory .env values with process environment precedence.
+    """Load the application .env file, giving process environment variables priority.
 
-    Use the source root during development and the executable directory when
-    frozen. A missing .env is allowed; syntax errors and interpolation are not.
-    Relative STATS_FILE paths use the same directory. Loading neither modifies
-    the process environment nor creates output files or directories.
+    Read .env from the source root during development or the executable
+    directory in a frozen application. A missing .env is allowed; invalid syntax
+    and interpolation are rejected.
+    Relative STATS_FILE paths use the same directory. Loading does not modify
+    the process environment or create output files or directories.
 
     Returns:
         Validated application configuration.

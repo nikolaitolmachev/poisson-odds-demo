@@ -1,4 +1,4 @@
-"""Typed team and match data with explicit stats output."""
+"""Represent teams and NHL matches and append match reports to a file."""
 
 from __future__ import annotations
 
@@ -25,13 +25,13 @@ class Team:
     xga: float = 0.0
 
     def __str__(self) -> str:
-        """Include xG only when both values are truthy, as in the original CLI."""
+        """Return the team name, including xG when both values are nonzero."""
         return f"{self.name} ({self.xgf}|{self.xga})" if self.xgf and self.xga else f"{self.name}"
 
 
 @dataclass(eq=False)
 class NHLMatch:
-    """A match with the existing poisson_odds bookmaker market types.
+    """An NHL match with bookmaker markets from poisson_odds.
 
     Attributes:
         date: Source kickoff date and time as a formatted string.
@@ -52,7 +52,7 @@ class NHLMatch:
     bookmaker_totals: list[BookmakerTotal] = field(default_factory=list)
 
     def __str__(self) -> str:
-        """Return the original date and team summary, including the final period."""
+        """Return the match date and teams, ending with a period."""
         return f"{self.date} {self.team_a} - {self.team_b}."
 
     def save_to_stats(self, message: str, path: Path) -> None:
@@ -60,7 +60,7 @@ class NHLMatch:
 
         Args:
             message: Report text, including any existing trailing newline.
-            path: Explicit Config.stats_file supplied by the caller.
+            path: Report output path supplied by the caller from Config.stats_file.
         """
         result = f"{self}\n{message}\n"
         with path.open("a", encoding="utf-8") as file:

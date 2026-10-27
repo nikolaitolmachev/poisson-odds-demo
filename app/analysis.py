@@ -1,4 +1,4 @@
-"""Original strength and odds formulas with separate analysis for each market."""
+"""Calculate team strength and compare bookmaker odds with model odds."""
 
 from __future__ import annotations
 
@@ -20,18 +20,18 @@ if TYPE_CHECKING:
 
 
 def calculate_quality(xgf_team: float, xga_opponent: float) -> float:
-    """Calculate the original team-strength formula without changing rounding.
+    """Calculate team strength from the team and opponent xG values.
 
     Args:
         xgf_team: Venue-specific expected goals for the team.
         xga_opponent: Venue-specific expected goals against its opponent.
 
     Returns:
-        The legacy model parameter rounded to three decimal places.
+        Team strength rounded to three decimal places.
 
     Notes:
         Inputs are not validated. Positive xG can produce a negative parameter;
-        NaN and infinity can propagate. Validity for Poisson remains unchecked.
+        NaN and infinity can propagate. The result is not checked for use in a Poisson model.
     """
     quality = (
         (consts.XG_SCALE_FACTOR * xgf_team + consts.XG_OFFSET)
@@ -42,7 +42,7 @@ def calculate_quality(xgf_team: float, xga_opponent: float) -> float:
 
 
 def calculate_difference_between_odds(user_odds: float, bookmaker_odds: float) -> float:
-    """Calculate the original relative odds difference in percent.
+    """Calculate how much bookmaker odds exceed model odds, as a percentage.
 
     Args:
         user_odds: Decimal odds produced by the model.
@@ -62,7 +62,7 @@ def calculate_difference_between_odds(user_odds: float, bookmaker_odds: float) -
 
 
 def _announce_value(differences: tuple[float, ...], threshold: int) -> bool:
-    """Print the existing warning if any rounded difference meets the threshold."""
+    """Announce potential value if any rounded difference meets the threshold."""
     qualifies = any(difference >= threshold for difference in differences)
     if qualifies:
         print("*****Potential value found!*****")
@@ -110,7 +110,7 @@ def _analyze_two_way_lines(
     """Compare two-outcome lines in bookmaker order and collect qualifying reports.
 
     Args:
-        bookmakers: Selected handicap or total lines in their existing order.
+        bookmakers: Selected handicap or total lines in processing order.
         model_lines: Corresponding model markets keyed by line.
         threshold: Inclusive threshold for rounded percentage differences.
         get_odds: Extract both odds in home/away or over/under order.
@@ -144,8 +144,8 @@ def _analyze_handicaps(
     """Print handicap comparisons in bookmaker order and collect qualifying lines.
 
     Args:
-        bookmakers: Selected handicap lines in their existing processing order.
-        user_model: Model providing the existing handicap-odds mapping.
+        bookmakers: Selected handicap lines in processing order.
+        user_model: Poisson model used to calculate handicap odds.
         threshold: Inclusive threshold for rounded percentage differences.
 
     Returns:
@@ -167,8 +167,8 @@ def _analyze_totals(bookmakers: list[BookmakerTotal], user_model: Poisson, thres
     """Print total comparisons in bookmaker order and collect qualifying lines.
 
     Args:
-        bookmakers: Selected total lines in their existing processing order.
-        user_model: Model providing the existing total-odds mapping.
+        bookmakers: Selected total lines in processing order.
+        user_model: Poisson model used to calculate total odds.
         threshold: Inclusive threshold for rounded percentage differences.
 
     Returns:
@@ -188,11 +188,11 @@ def _analyze_totals(bookmakers: list[BookmakerTotal], user_model: Poisson, thres
 
 
 def analyze_match_odds(nhl_match: NHLMatch, model: Poisson, config: Config) -> None:
-    """Print comparisons in market order and append qualifying lines to stats.
+    """Compare markets and append qualifying lines to the configured report.
 
     Args:
         nhl_match: Match containing the selected bookmaker markets.
-        model: Existing poisson_odds model, using the 0.1.3 API.
+        model: Poisson model that provides moneyline, handicap, and total odds.
         config: Validated threshold and explicit output path.
     """
     # Preserve the original property access before any headings, even without odds.

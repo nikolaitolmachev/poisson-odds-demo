@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Iterator
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from lxml import html
 from lxml.etree import ParserError
@@ -13,13 +12,16 @@ from poisson_odds import BookmakerHandicap, BookmakerMoneyline, BookmakerTotal
 
 from app import constants as consts
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
 _MONEYLINE_OUTCOME_COUNT = 3
 _BOOKMAKER_IDS = frozenset(bookmaker_id for bookmaker_id, _ in consts.BOOKMAKERS)
 LineMarket = TypeVar("LineMarket", BookmakerHandicap, BookmakerTotal)
 
 
 def parse_moneyline(payload: str) -> dict[int, BookmakerMoneyline]:
-    """Parse active 1X2 rows for whitelisted bookmakers.
+    """Parse active moneyline odds for bookmakers listed in BOOKMAKERS.
 
     Args:
         payload: BetExplorer odds endpoint response body.
@@ -28,7 +30,7 @@ def parse_moneyline(payload: str) -> dict[int, BookmakerMoneyline]:
         Bookmaker IDs mapped to complete three-way moneyline rows.
 
     Raises:
-        ValueError: The payload is empty, not JSON, or lacks an HTML ``odds`` value.
+        ValueError: The payload is empty, is not valid JSON, or has no valid odds HTML.
     """
     tree = _load_odds_tree(payload, "moneyline")
     moneylines: dict[int, BookmakerMoneyline] = {}
@@ -45,7 +47,7 @@ def parse_moneyline(payload: str) -> dict[int, BookmakerMoneyline]:
 
 
 def parse_handicaps(payload: str) -> dict[int, list[BookmakerHandicap]]:
-    """Parse active Asian handicap rows for whitelisted bookmakers.
+    """Parse active Asian handicap odds for bookmakers listed in BOOKMAKERS.
 
     Args:
         payload: BetExplorer odds endpoint response body.
@@ -54,7 +56,7 @@ def parse_handicaps(payload: str) -> dict[int, list[BookmakerHandicap]]:
         Bookmaker IDs mapped to valid handicap lines in source order.
 
     Raises:
-        ValueError: The payload is empty, not JSON, or lacks an HTML ``odds`` value.
+        ValueError: The payload is empty, is not valid JSON, or has no valid odds HTML.
     """
     tree = _load_odds_tree(payload, "handicap")
     handicaps_by_bookmaker: dict[int, list[BookmakerHandicap]] = {}
@@ -64,7 +66,7 @@ def parse_handicaps(payload: str) -> dict[int, list[BookmakerHandicap]]:
 
 
 def parse_totals(payload: str) -> dict[int, list[BookmakerTotal]]:
-    """Parse active totals rows for whitelisted bookmakers.
+    """Parse active total odds for bookmakers listed in BOOKMAKERS.
 
     Args:
         payload: BetExplorer odds endpoint response body.
@@ -73,7 +75,7 @@ def parse_totals(payload: str) -> dict[int, list[BookmakerTotal]]:
         Bookmaker IDs mapped to valid over/under lines in source order.
 
     Raises:
-        ValueError: The payload is empty, not JSON, or lacks an HTML ``odds`` value.
+        ValueError: The payload is empty, is not valid JSON, or has no valid odds HTML.
     """
     tree = _load_odds_tree(payload, "totals")
     totals_by_bookmaker: dict[int, list[BookmakerTotal]] = {}
@@ -93,7 +95,7 @@ def _load_odds_tree(payload: str, market: str) -> html.HtmlElement:
         Parsed odds HTML.
 
     Raises:
-        ValueError: The payload is empty, not JSON, or lacks valid HTML.
+        ValueError: The payload is empty, is not valid JSON, or has no valid odds HTML.
     """
     if not payload or not payload.strip():
         raise ValueError(f"BetExplorer returned an empty {market} response.")
@@ -111,7 +113,7 @@ def _load_odds_tree(payload: str, market: str) -> html.HtmlElement:
 
 
 def _iter_line_rows(tree: html.HtmlElement) -> Iterator[tuple[int, float, list[float]]]:
-    """Yield valid two-way line rows with whitelisted bookmaker IDs.
+    """Yield valid handicap or total rows for bookmakers listed in BOOKMAKERS.
 
     Args:
         tree: Parsed BetExplorer odds HTML.
@@ -144,7 +146,7 @@ def _iter_line_rows(tree: html.HtmlElement) -> Iterator[tuple[int, float, list[f
 
 
 def _row_bookmaker_id(row: html.HtmlElement) -> int | None:
-    """Return a whitelisted bookmaker ID from a row, or None."""
+    """Return the row bookmaker ID if it is listed in BOOKMAKERS, or None."""
     try:
         bookmaker_id = int(row.get("data-bid", ""))
     except ValueError:
@@ -157,7 +159,7 @@ def _active_odds(
     expected_count: int,
     minimum: float | None = None,
 ) -> list[float] | None:
-    """Return validated active odds, or None when the row is unusable.
+    """Return valid active odds, or None if the row cannot be used.
 
     Args:
         cells: Odds cells from a single bookmaker row.
@@ -200,7 +202,7 @@ def select_moneyline(
         moneylines: Parsed moneyline rows keyed by bookmaker ID.
 
     Returns:
-        The first available moneyline in ``BOOKMAKERS`` priority order, or None.
+        The first available moneyline in BOOKMAKERS priority order, or None.
     """
     for bookmaker_id, _ in consts.BOOKMAKERS:
         moneyline = moneylines.get(bookmaker_id)
@@ -210,13 +212,13 @@ def select_moneyline(
 
 
 def select_lines(markets: dict[int, list[LineMarket]]) -> list[LineMarket]:
-    """Return unique lines in bookmaker priority order, sorted by line.
+    """Select unique lines by bookmaker priority and sort them by line value.
 
     Args:
         markets: Parsed handicap or total rows keyed by bookmaker ID.
 
     Returns:
-        Unique lines selected from the first bookmakers in ``BOOKMAKERS`` order.
+        Lines sorted by value, with duplicates resolved in BOOKMAKERS priority order.
     """
     selected: list[LineMarket] = []
     seen: set[float] = set()

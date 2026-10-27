@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime
+from typing import TYPE_CHECKING
 from urllib.parse import urljoin, urlsplit
 
 from lxml import html
@@ -12,17 +13,20 @@ from lxml.etree import ParserError
 
 from app import constants as consts
 
+if TYPE_CHECKING:
+    from typing import TypeGuard
+
 _MONEYLINE_OUTCOME_COUNT = 3
 
 
 @dataclass(frozen=True)
 class MatchMetadata:
-    """Date and teams parsed from a BetExplorer match page.
+    """Match date and team names parsed from a BetExplorer page.
 
     Attributes:
-        date: Kickoff date and time formatted as ``YYYY-MM-DD HH:MM``.
-        home: Home team name exactly as provided by BetExplorer.
-        away: Away team name exactly as provided by BetExplorer.
+        date: Match start date and time in YYYY-MM-DD HH:MM format.
+        home: Home team name from BetExplorer, with surrounding whitespace removed.
+        away: Away team name from BetExplorer, with surrounding whitespace removed.
     """
 
     date: str
@@ -31,7 +35,9 @@ class MatchMetadata:
 
 
 def parse_match_urls(document: str) -> list[str]:
-    """Extract unique NHL match URLs that have three moneyline odds.
+    """Extract unique NHL match URLs with three listed 1X2 odds values.
+
+    Count nonempty odds attributes without validating their numeric values.
 
     Args:
         document: BetExplorer NHL fixtures HTML.
@@ -40,7 +46,8 @@ def parse_match_urls(document: str) -> list[str]:
         Match URLs in source order without duplicates.
 
     Raises:
-        ValueError: The document is empty, not HTML, or lacks one fixtures table.
+        ValueError: The document is empty, is not valid HTML, does not contain
+            exactly one fixtures table, or contains an invalid selected match URL.
     """
     if not document or not document.strip():
         raise ValueError("BetExplorer returned an empty fixtures page.")
@@ -94,7 +101,8 @@ def event_id_from_url(url: str) -> str:
         Eight-character BetExplorer event ID.
 
     Raises:
-        ValueError: The URL is not an absolute BetExplorer NHL match URL.
+        ValueError: The URL is not an absolute BetExplorer NHL match URL or
+            does not end with an eight-character alphanumeric event ID.
     """
     parsed = urlsplit(url)
     if (
@@ -110,7 +118,7 @@ def event_id_from_url(url: str) -> str:
 
 
 def parse_match_metadata(document: str) -> MatchMetadata:
-    """Parse match date and teams from JSON-LD, with HTML fallbacks.
+    """Parse match date and teams from JSON-LD, using HTML for missing values.
 
     Args:
         document: BetExplorer match page HTML.
@@ -158,7 +166,8 @@ def parse_match_metadata(document: str) -> MatchMetadata:
         if names:
             parts = names[0].strip().split(" - ")
             if len(parts) == 2:
-                home, away = (part.strip() for part in parts)
+                home = home or parts[0].strip()
+                away = away or parts[1].strip()
 
     missing = [
         label
@@ -170,7 +179,7 @@ def parse_match_metadata(document: str) -> MatchMetadata:
     return MatchMetadata(date_value, home, away)
 
 
-def _is_sports_event(payload: object) -> bool:
+def _is_sports_event(payload: object) -> TypeGuard[dict[str, object]]:
     """Return whether a JSON-LD payload describes a sports event."""
     if not isinstance(payload, dict):
         return False

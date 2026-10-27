@@ -1,1 +1,1 @@
-"""Existing NHL statistics and bookmaker data collectors."""
+"""Collect NHL statistics and bookmaker odds."""
