@@ -1,9 +1,40 @@
-Lib
-Scripts
 pyvenv.cfg
-.idea
-**/__pycache__/
 /build
 /dist
 /xGNHL.spec
 /xGNHL.exe
+
+# Python virtual environments.
+venv/
+.venv/
+
+# IDE settings.
+.idea/
+
+# Python bytecode and tooling caches.
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+
+# Local environment configuration.
+.env
+.env.*
+!.env.example
+
+# Generated output and packaging files.
+stats.txt
+*.exe
+*.spec
+*.egg-info/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+
+# temps
+legacy/
+Entities/
+Img/
+Services/
+Value/
+tests/

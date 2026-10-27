@@ -1,0 +1,1 @@
+"""NHL odds comparison CLI."""
