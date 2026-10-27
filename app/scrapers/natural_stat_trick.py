@@ -16,6 +16,24 @@ if TYPE_CHECKING:
 XGData = dict[str, tuple[float, float]]
 
 
+def normalize_team_names(data: XGData) -> XGData:
+    """Map Natural Stat Trick team names to their BetExplorer equivalents.
+
+    Args:
+        data: Team names mapped to xG pairs.
+
+    Returns:
+        A new dictionary with the two known aliases replaced. The input is unchanged.
+    """
+    normalized = data.copy()
+    for old_name, new_name in (
+        ("St Louis Blues", "St. Louis Blues"),
+    ):
+        if old_name in normalized:
+            normalized[new_name] = normalized.pop(old_name)
+    return normalized
+
+
 def _parse_xg_data(document: str, minimum_games: int) -> XGData:
     """Parse the team table and reject incomplete or invalid statistics."""
     if not document or not document.strip():
@@ -81,7 +99,7 @@ async def get_xg_data_for_all_teams(
     Returns:
         Source team names mapped to (xgf, xga) pairs for teams meeting the
         minimum number of games.
-        The CLI retains responsibility for normalizing team names.
+        Use normalize_team_names() to align team names with BetExplorer.
 
     Raises:
         ConfigurationError: Proxy use was requested without a configured URL.

@@ -18,7 +18,7 @@ from app.analysis import analyze_match_odds, calculate_quality
 from app.cache import read_xg_cache, save_xg_cache
 from app.config import ConfigurationError, load_config
 from app.scrapers.betexplorer import BetExplorerScraper
-from app.scrapers.natural_stat_trick import get_xg_data_for_all_teams
+from app.scrapers.natural_stat_trick import get_xg_data_for_all_teams, normalize_team_names
 
 if TYPE_CHECKING:
     from app.config import Config
@@ -74,14 +74,8 @@ async def load_xgs(config: Config, use_proxy: bool) -> tuple[XGData, XGData]:
             f"{cached.retrieved_at.isoformat()} (UTC)."
         )
         return cached.home, cached.away
-    for data in (home, away):
-        # TODO: move to scrapers/
-        for old_name, new_name in (
-            ("Utah Hockey Club", "Utah"),
-            ("St Louis Blues", "St. Louis Blues"),
-        ):
-            if old_name in data:
-                data[new_name] = data.pop(old_name)
+    home = normalize_team_names(home)
+    away = normalize_team_names(away)
     try:
         save_xg_cache(home, away, config.minimal_matches_to_count)
     except OSError:
