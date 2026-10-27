@@ -23,6 +23,7 @@ __pycache__/
 
 # Generated output and packaging files.
 stats.txt
+xg_cache.json
 *.exe
 *.spec
 *.egg-info/

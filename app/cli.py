@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
@@ -15,6 +16,7 @@ from urllib3.exceptions import HTTPError as Urllib3HTTPError
 
 from app import constants as consts
 from app.analysis import analyze_match_odds, calculate_quality
+from app.cache import read_xg_cache, save_xg_cache
 from app.config import ConfigurationError, load_config
 from app.scrapers.betexplorer import Scraper
 from app.scrapers.natural_stat_trick import get_xg_data_for_all_teams
@@ -25,7 +27,7 @@ if TYPE_CHECKING:
 
 
 async def load_xgs(config: Config, use_proxy: bool) -> tuple[XGData, XGData]:
-    """Load and normalize home and away xG using the existing two requests.
+    """Load cached xG or refresh both venues, with stale fallback on retrieval errors.
 
     Args:
         config: Application settings shared by both requests.
@@ -39,24 +41,40 @@ async def load_xgs(config: Config, use_proxy: bool) -> tuple[XGData, XGData]:
         ValueError: Either venue returned no usable xG data.
         RequestException: A statistics request failed.
     """
+    cached = read_xg_cache(config.minimal_matches_to_count)
+    if cached is not None and cached.is_fresh(datetime.now(timezone.utc)):
+        return cached.home, cached.away
     if use_proxy and not config.proxy:
         raise ConfigurationError(
             "Set the PROXY environment variable or enter N at the proxy prompt."
         )
-    session = AsyncHTMLSession()
-    home_task = asyncio.create_task(get_xg_data_for_all_teams(session, config, use_proxy=use_proxy))
-    away_task = asyncio.create_task(
-        get_xg_data_for_all_teams(session, config, side="away", use_proxy=use_proxy)
-    )
     try:
-        home, away = await asyncio.gather(home_task, away_task)
-    finally:
-        for task in (home_task, away_task):
-            task.cancel()
-        await asyncio.gather(home_task, away_task, return_exceptions=True)
-        await session.close()
-    if not home or not away:
-        raise ValueError("Home or away xG data is missing.")
+        session = AsyncHTMLSession()
+        home_task = asyncio.create_task(
+            get_xg_data_for_all_teams(session, config, use_proxy=use_proxy)
+        )
+        away_task = asyncio.create_task(
+            get_xg_data_for_all_teams(session, config, side="away", use_proxy=use_proxy)
+        )
+        try:
+            home, away = await asyncio.gather(home_task, away_task)
+        finally:
+            for task in (home_task, away_task):
+                task.cancel()
+            await asyncio.gather(home_task, away_task, return_exceptions=True)
+            await session.close()
+        if not home or not away:
+            raise ValueError("Home or away xG data is missing.")
+    except ConfigurationError:
+        raise
+    except (RequestException, Urllib3HTTPError, OSError, ValueError, IndexError, ParserError):
+        if cached is None:
+            raise
+        print(
+            "Warning: Unable to refresh xG data. Using cached data retrieved at "
+            f"{cached.retrieved_at.isoformat()} (UTC)."
+        )
+        return cached.home, cached.away
     for data in (home, away):
         # TODO: move to scrapers/
         for old_name, new_name in (
@@ -65,6 +83,10 @@ async def load_xgs(config: Config, use_proxy: bool) -> tuple[XGData, XGData]:
         ):
             if old_name in data:
                 data[new_name] = data.pop(old_name)
+    try:
+        save_xg_cache(home, away, config.minimal_matches_to_count)
+    except OSError:
+        print("Warning: Unable to save xG cache. Continuing with fresh data.")
     return home, away
 
 

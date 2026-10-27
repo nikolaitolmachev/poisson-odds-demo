@@ -9,6 +9,7 @@ SUFFIX_FOR_TOTALS = "#ou"
 XG_SITE_NHL = (
     "https://www.naturalstattrick.com/teamtable.php?sit=5v5&score=all&rate=y&team=all&loc="
 )
+XG_REFERER = "https://www.naturalstattrick.com/teamtable.php"
 
 USER_AGENT_SHORT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
