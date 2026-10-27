@@ -11,14 +11,13 @@ from lxml.etree import ParserError
 from poisson_odds.poisson import Poisson
 from requests.exceptions import RequestException
 from requests_html import AsyncHTMLSession
-from selenium.common.exceptions import WebDriverException
 from urllib3.exceptions import HTTPError as Urllib3HTTPError
 
 from app import constants as consts
 from app.analysis import analyze_match_odds, calculate_quality
 from app.cache import read_xg_cache, save_xg_cache
 from app.config import ConfigurationError, load_config
-from app.scrapers.betexplorer import Scraper
+from app.scrapers.betexplorer import BetExplorerScraper
 from app.scrapers.natural_stat_trick import get_xg_data_for_all_teams
 
 if TYPE_CHECKING:
@@ -102,36 +101,40 @@ def analyze_all_matches(config: Config, home: XGData, away: XGData) -> bool:
         True if every match was processed successfully or no matches were found.
     """
     print("=" * 100)
-    try:
-        urls = Scraper.get_urls_all_upcoming_matches()
-    except (
-        RequestException,
-        Urllib3HTTPError,
-        WebDriverException,
-        OSError,
-        ValueError,
-        IndexError,
-    ):
-        print("Unable to load NHL match data.")
-        print("=" * 100)
-        return False
-    if urls:
-        count = "1 NHL match" if len(urls) == 1 else f"{len(urls)} NHL matches"
-        print(f"Found {count}.")
-        print("=" * 100)
-        successful = True
-        for url in urls:
-            if not analyze_single_match(url, config, home, away):
-                successful = False
+    with BetExplorerScraper() as scraper:
+        try:
+            urls = scraper.get_upcoming_match_urls()
+        except (RequestException, Urllib3HTTPError):
+            print("Unable to load NHL match data.")
             print("=" * 100)
-        return successful
-    else:
+            return False
+        except ValueError:
+            print("Invalid BetExplorer fixtures response.")
+            print("=" * 100)
+            return False
+        if urls:
+            count = "1 NHL match" if len(urls) == 1 else f"{len(urls)} NHL matches"
+            print(f"Found {count}.")
+            print("=" * 100)
+            successful = True
+            for url in urls:
+                if not analyze_single_match(url, config, home, away, scraper=scraper):
+                    successful = False
+                print("=" * 100)
+            return successful
         print("No upcoming NHL matches with bookmaker odds were found.")
         print("=" * 100)
         return True
 
 
-def analyze_single_match(url: str, config: Config, home: XGData, away: XGData) -> bool:
+def analyze_single_match(
+    url: str,
+    config: Config,
+    home: XGData,
+    away: XGData,
+    *,
+    scraper: BetExplorerScraper | None = None,
+) -> bool:
     """Analyze one NHL match and report expected scraping or file errors.
 
     Args:
@@ -139,13 +142,18 @@ def analyze_single_match(url: str, config: Config, home: XGData, away: XGData) -
         config: Validated application settings.
         home: Cached home xG data.
         away: Cached away xG data.
+        scraper: Shared scraper for all-matches mode. If omitted, a scraper is
+            created and closed for this operation.
 
     Returns:
         Whether the match was analyzed successfully.
     """
     try:
-        return _analyze_single_match(url, config, home, away)
-    except (RequestException, Urllib3HTTPError, WebDriverException):
+        if scraper is None:
+            with BetExplorerScraper() as owned_scraper:
+                return _analyze_single_match(url, config, home, away, owned_scraper)
+        return _analyze_single_match(url, config, home, away, scraper)
+    except (RequestException, Urllib3HTTPError):
         print("Unable to load NHL match data.")
         return False
     except OSError:
@@ -153,7 +161,9 @@ def analyze_single_match(url: str, config: Config, home: XGData, away: XGData) -
         return False
 
 
-def _analyze_single_match(url: str, config: Config, home: XGData, away: XGData) -> bool:
+def _analyze_single_match(
+    url: str, config: Config, home: XGData, away: XGData, scraper: BetExplorerScraper
+) -> bool:
     """Retrieve an NHL match, calculate team strength, and compare market odds.
 
     Args:
@@ -161,12 +171,13 @@ def _analyze_single_match(url: str, config: Config, home: XGData, away: XGData) 
         config: Validated application settings.
         home: Cached home xG data.
         away: Cached away xG data.
+        scraper: HTTP scraper owned by the caller.
     """
     print("Loading NHL match data...")
     try:
-        nhl_match = Scraper.get_main_data_for_match(url)
-    except (ValueError, TypeError, IndexError, ParserError):
-        print("Unable to load NHL match data.")
+        nhl_match = scraper.get_match(url)
+    except ValueError:
+        print("Invalid BetExplorer match URL or response.")
         return False
     if nhl_match is None:
         print("Unable to load NHL match data.")

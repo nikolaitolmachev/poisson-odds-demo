@@ -6,8 +6,6 @@ NHL_MATCH_PATH_PREFIX = "/hockey/usa/nhl/"
 NHL_LEAGUE = BETEXPLORER_BASE + NHL_MATCH_PATH_PREFIX
 NHL_FIXTURES = NHL_LEAGUE + "fixtures/"
 BETEXPLORER_ODDS_URL = BETEXPLORER_BASE + "/match-odds/{event_id}/0/{market}/odds/?lang=en"
-SUFFIX_FOR_HANDICAPS = "#ah"
-SUFFIX_FOR_TOTALS = "#ou"
 
 XG_SITE_NHL = (
     "https://www.naturalstattrick.com/teamtable.php?sit=5v5&score=all&rate=y&team=all&loc="
@@ -18,10 +16,8 @@ USER_AGENT_SHORT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
 )
-USER_AGENT_FULL = "User-agent=" + USER_AGENT_SHORT
 BETEXPLORER_HEADERS = {"User-agent": USER_AGENT_SHORT}
 
-NEEDED_BOOKIES = ("BetInAsia", "Pinnacle", "1xBet", "bet365", "BetVictor", "Unibet")
 MINIMAL_ODDS_TO_GET_LINE = 1.50
 
 # Ordered by selection priority; the first available bookmaker wins.
