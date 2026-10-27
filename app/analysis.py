@@ -161,7 +161,7 @@ def _analyze_handicaps(
         return ""
     return _analyze_two_way_lines(
         bookmakers,
-        user_model.calculate_handicap_odds_by_Poisson(),
+        user_model.calculate_handicap_odds_by_poisson(),
         threshold,
         lambda line: (line.odds_home, line.odds_away),
     )
@@ -185,7 +185,7 @@ def _analyze_totals(bookmakers: list[BookmakerTotal], user_model: Poisson, thres
 
     return _analyze_two_way_lines(
         bookmakers,
-        user_model.calculate_total_odds_by_Poisson(),
+        user_model.calculate_total_odds_by_poisson(),
         threshold,
         lambda line: (line.odds_over, line.odds_under),
     )

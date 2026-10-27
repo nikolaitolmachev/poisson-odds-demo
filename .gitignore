@@ -1,36 +1,41 @@
-pyvenv.cfg
-/build
-/dist
-/xGNHL.spec
-/xGNHL.exe
-
-# Python virtual environments.
-venv/
-.venv/
-
-# IDE settings.
-.idea/
-
-# Python bytecode and tooling caches.
+# Python bytecode and caches
 __pycache__/
+*.py[cod]
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
 
-# Local environment configuration.
+# Virtual environments
+.venv/
+venv/
+pyvenv.cfg
+
+# Environment variables
 .env
 .env.*
 !.env.example
 
-# Generated output and packaging files.
-stats.txt
-xg_cache.json
-*.exe
-*.spec
-*.egg-info/
+# IDE settings
+.idea/
+.vscode/
+
+# Test coverage
 .coverage
 .coverage.*
 htmlcov/
-.mypy_cache/
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+
+# PyInstaller
+*.spec
+*.exe
+
+# Generated application data
+stats.txt
+xg_cache.json
 
 # temps
 legacy/
