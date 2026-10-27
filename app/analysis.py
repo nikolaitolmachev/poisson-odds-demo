@@ -93,9 +93,11 @@ def _analyze_moneyline(
     draw = calculate_difference_between_odds(model.odds_draw, bookmaker.odds_draw)
     away = calculate_difference_between_odds(model.odds_away, bookmaker.odds_away)
     qualifies = _announce_value((home, draw, away), threshold)
+    market, _, bookmaker_odds = str(bookmaker).partition(": ")
+    model_odds = str(model).partition(": ")[2]
     message = (
-        f"{bookmaker} || Model odds: {model} "
-        f"\t=> Odds difference = ({home} %) - ({draw} %) - ({away} %)"
+        f"{market + ':':<16} {bookmaker_odds:<18} | Model odds: {model_odds:<18} "
+        f"| Odds difference = {home!s:>9} % / {draw!s:>9} % / {away!s:>9} %"
     )
     print(message)
     return message + "\n" if qualifies else ""
@@ -128,9 +130,11 @@ def _analyze_two_way_lines(
         first = calculate_difference_between_odds(model_first, bookmaker_first)
         second = calculate_difference_between_odds(model_second, bookmaker_second)
         qualifies = _announce_value((first, second), threshold)
+        market, _, bookmaker_odds = str(bookmaker).partition(": ")
+        model_odds = f"{model_first} / {model_second}"
         message = (
-            f"{bookmaker} \t|| Model odds: {model_first} "
-            f"/ {model_second} \t=> Odds difference = {first} % / {second} %"
+            f"{market + ':':<16} {bookmaker_odds:<18} | Model odds: {model_odds:<18} "
+            f"| Odds difference = {first!s:>9} % / {second!s:>9} %"
         )
         print(message)
         if qualifies:
