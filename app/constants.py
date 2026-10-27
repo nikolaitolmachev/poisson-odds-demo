@@ -1,8 +1,11 @@
 """Source URLs, request settings, and model constants."""
 
+BETEXPLORER_BASE = "https://www.betexplorer.com"
 BETEXPLORER_HOSTNAMES = ("betexplorer.com", "www.betexplorer.com")
 NHL_MATCH_PATH_PREFIX = "/hockey/usa/nhl/"
-NHL_LEAGUE = "https://www.betexplorer.com/hockey/usa/nhl/"
+NHL_LEAGUE = BETEXPLORER_BASE + NHL_MATCH_PATH_PREFIX
+NHL_FIXTURES = NHL_LEAGUE + "fixtures/"
+BETEXPLORER_ODDS_URL = BETEXPLORER_BASE + "/match-odds/{event_id}/0/{market}/odds/?lang=en"
 SUFFIX_FOR_HANDICAPS = "#ah"
 SUFFIX_FOR_TOTALS = "#ou"
 
@@ -16,9 +19,18 @@ USER_AGENT_SHORT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
 )
 USER_AGENT_FULL = "User-agent=" + USER_AGENT_SHORT
+BETEXPLORER_HEADERS = {"User-agent": USER_AGENT_SHORT}
 
 NEEDED_BOOKIES = ("BetInAsia", "Pinnacle", "1xBet", "bet365", "BetVictor", "Unibet")
 MINIMAL_ODDS_TO_GET_LINE = 1.50
+
+# Ordered by selection priority; the first available bookmaker wins.
+BOOKMAKERS = (
+    (575, "BetInAsia"),
+    (417, "1xBet"),
+    (1011, "Megapari"),
+    (909, "Bets.io"),
+)
 
 XG_SCALE_FACTOR = 0.75
 XG_OFFSET = 0.05
