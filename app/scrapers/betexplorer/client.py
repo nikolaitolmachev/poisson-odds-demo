@@ -78,9 +78,10 @@ class BetExplorerScraper:
         Raises:
             requests.RequestException: The request failed or returned an error status.
         """
+        headers = {"User-agent": consts.USER_AGENT}
         response = self._session.get(
             url,
-            headers=consts.BETEXPLORER_HEADERS,
+            headers=headers,
             timeout=self._timeout,
         )
         response.raise_for_status()

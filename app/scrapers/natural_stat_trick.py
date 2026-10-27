@@ -113,7 +113,7 @@ async def get_xg_data_for_all_teams(
         )
     proxies = {"https": config.proxy} if use_proxy else None
     header = {
-        "User-agent": consts.USER_AGENT_SHORT,
+        "User-agent": consts.USER_AGENT,
         "Referer": consts.XG_REFERER,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
