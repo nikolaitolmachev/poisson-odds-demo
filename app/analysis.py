@@ -34,8 +34,8 @@ def calculate_quality(xgf_team: float, xga_opponent: float) -> float:
         NaN and infinity can propagate. Validity for Poisson remains unchecked.
     """
     quality = (
-        (consts.XG_DIGRESSION_PREFIX * xgf_team + consts.XG_DIGRESSION_SUFFIX)
-        * (consts.XG_DIGRESSION_PREFIX * xga_opponent + consts.XG_DIGRESSION_SUFFIX)
+        (consts.XG_SCALE_FACTOR * xgf_team + consts.XG_OFFSET)
+        * (consts.XG_SCALE_FACTOR * xga_opponent + consts.XG_OFFSET)
     ) - 1
 
     return round(quality, 3)
@@ -65,7 +65,7 @@ def _announce_value(differences: tuple[float, ...], threshold: int) -> bool:
     """Print the existing warning if any rounded difference meets the threshold."""
     qualifies = any(difference >= threshold for difference in differences)
     if qualifies:
-        print("*****There is probably the value!*****")
+        print("*****Potential value found!*****")
     return qualifies
 
 
@@ -84,16 +84,19 @@ def _analyze_moneyline(
     Returns:
         The qualifying comparison with its trailing newline, or an empty string.
     """
-    print("Looking for a value for moneyline...")
+    print("Comparing moneyline odds...")
     if bookmaker is None:
-        print("There is no odds for moneyline from bookmaker.")
+        print("No bookmaker odds are available for the moneyline market.")
         return ""
 
     home = calculate_difference_between_odds(model.odds_home, bookmaker.odds_home)
     draw = calculate_difference_between_odds(model.odds_draw, bookmaker.odds_draw)
     away = calculate_difference_between_odds(model.odds_away, bookmaker.odds_away)
     qualifies = _announce_value((home, draw, away), threshold)
-    message = f"{bookmaker} || Poisson: {model} \t=> Value = ({home} %) - ({draw} %) - ({away} %)"
+    message = (
+        f"{bookmaker} || Model odds: {model} "
+        f"\t=> Odds difference = ({home} %) - ({draw} %) - ({away} %)"
+    )
     print(message)
     return message + "\n" if qualifies else ""
 
@@ -126,8 +129,8 @@ def _analyze_two_way_lines(
         second = calculate_difference_between_odds(model_second, bookmaker_second)
         qualifies = _announce_value((first, second), threshold)
         message = (
-            f"{bookmaker} \t|| Poisson: {model_first} "
-            f"/ {model_second} \t=> Value = {first} % / {second} %"
+            f"{bookmaker} \t|| Model odds: {model_first} "
+            f"/ {model_second} \t=> Odds difference = {first} % / {second} %"
         )
         print(message)
         if qualifies:
@@ -148,9 +151,9 @@ def _analyze_handicaps(
     Returns:
         Qualifying comparisons with trailing newlines; unavailable lines are skipped.
     """
-    print("Looking for a value for handicaps...")
+    print("Comparing handicap odds...")
     if not bookmakers:
-        print("There are no any handicaps from bookmaker.")
+        print("No bookmaker odds are available for the handicap market.")
         return ""
     return _analyze_two_way_lines(
         bookmakers,
@@ -171,9 +174,9 @@ def _analyze_totals(bookmakers: list[BookmakerTotal], user_model: Poisson, thres
     Returns:
         Qualifying comparisons with trailing newlines; unavailable lines are skipped.
     """
-    print("Looking for a value for totals...")
+    print("Comparing total odds...")
     if not bookmakers:
-        print("There are no any totals from bookmaker.")
+        print("No bookmaker odds are available for the total market.")
         return ""
 
     return _analyze_two_way_lines(

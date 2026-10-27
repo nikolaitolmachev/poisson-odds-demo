@@ -44,7 +44,7 @@ class Config:
         if self.minimal_matches_to_count < 1:
             raise ConfigurationError("MINIMAL_MATCHES_TO_COUNT must be at least 1.")
         if self.model_value_difference < 0:
-            raise ConfigurationError("MODEL_VALUE_DIFFERENCE must be nonnegative.")
+            raise ConfigurationError("MODEL_VALUE_DIFFERENCE must be 0 or greater.")
         if self.proxy:
             try:
                 parsed = urlsplit(self.proxy)
@@ -90,7 +90,7 @@ def _read_env_file(path: Path) -> dict[str, str]:
     except FileNotFoundError:
         pass
     except (OSError, UnicodeError) as exc:
-        raise ConfigurationError("Cannot read .env configuration.") from exc
+        raise ConfigurationError("Unable to read the .env file.") from exc
     return values
 
 
@@ -122,7 +122,7 @@ def load_config() -> Config:
 
     stats_file = values.get("STATS_FILE", "stats.txt").strip()
     if not stats_file or "\x00" in stats_file:
-        raise ConfigurationError("STATS_FILE must be a nonempty file path.")
+        raise ConfigurationError("STATS_FILE must not be empty or contain a null character.")
     return Config(
         minimal_matches_to_count=minimal_matches,
         model_value_difference=value_difference,

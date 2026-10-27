@@ -3,16 +3,25 @@
 from __future__ import annotations
 
 import asyncio
+from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
+from lxml.etree import ParserError
 from poisson_odds.poisson import Poisson
-from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import RequestException
 from requests_html import AsyncHTMLSession
+from selenium.common.exceptions import WebDriverException
+from urllib3.exceptions import HTTPError as Urllib3HTTPError
 
 from app import constants as consts
 from app.analysis import analyze_match_odds, calculate_quality
-from app.config import Config, ConfigurationError, load_config
+from app.config import ConfigurationError, load_config
 from app.scrapers.betexplorer import Scraper
-from app.scrapers.natural_stat_trick import XGData, get_xg_data_for_all_teams
+from app.scrapers.natural_stat_trick import get_xg_data_for_all_teams
+
+if TYPE_CHECKING:
+    from app.config import Config
+    from app.scrapers.natural_stat_trick import XGData
 
 
 async def load_xgs(config: Config, use_proxy: bool) -> tuple[XGData, XGData]:
@@ -24,18 +33,32 @@ async def load_xgs(config: Config, use_proxy: bool) -> tuple[XGData, XGData]:
 
     Returns:
         Home and away xG dictionaries with the two legacy name replacements.
+
+    Raises:
+        ConfigurationError: Proxy use was requested without a configured URL.
+        ValueError: Either venue returned no usable xG data.
+        RequestException: A statistics request failed.
     """
     if use_proxy and not config.proxy:
-        raise ConfigurationError("Set PROXY in .env or answer N to the proxy prompt.")
-    session = AsyncHTMLSession()
-    try:
-        home, away = await asyncio.gather(
-            get_xg_data_for_all_teams(session, config, use_proxy=use_proxy),
-            get_xg_data_for_all_teams(session, config, side="away", use_proxy=use_proxy),
+        raise ConfigurationError(
+            "Set the PROXY environment variable or enter N at the proxy prompt."
         )
+    session = AsyncHTMLSession()
+    home_task = asyncio.create_task(get_xg_data_for_all_teams(session, config, use_proxy=use_proxy))
+    away_task = asyncio.create_task(
+        get_xg_data_for_all_teams(session, config, side="away", use_proxy=use_proxy)
+    )
+    try:
+        home, away = await asyncio.gather(home_task, away_task)
     finally:
+        for task in (home_task, away_task):
+            task.cancel()
+        await asyncio.gather(home_task, away_task, return_exceptions=True)
         await session.close()
+    if not home or not away:
+        raise ValueError("Home or away xG data is missing.")
     for data in (home, away):
+        # TODO: move to scrapers/
         for old_name, new_name in (
             ("Utah Hockey Club", "Utah"),
             ("St Louis Blues", "St. Louis Blues"),
@@ -45,29 +68,70 @@ async def load_xgs(config: Config, use_proxy: bool) -> tuple[XGData, XGData]:
     return home, away
 
 
-def analyze_all_matches(config: Config, home: XGData, away: XGData) -> None:
+def analyze_all_matches(config: Config, home: XGData, away: XGData) -> bool:
     """Analyze all upcoming matches with the original sequential workflow.
 
     Args:
         config: Validated application settings.
         home: Cached home xG data.
         away: Cached away xG data.
+
+    Returns:
+        Whether every match was processed successfully.
     """
     print("=" * 100)
-    urls = Scraper.get_urls_all_upcoming_matches()
+    try:
+        urls = Scraper.get_urls_all_upcoming_matches()
+    except (
+        RequestException,
+        Urllib3HTTPError,
+        WebDriverException,
+        OSError,
+        ValueError,
+        IndexError,
+    ):
+        print("Unable to load NHL match data.")
+        print("=" * 100)
+        return False
     if urls:
-        count = "1 match was" if len(urls) == 1 else f"{len(urls)} matches were"
-        print(f"Succesfull, {count} founded.")
+        count = "1 NHL match" if len(urls) == 1 else f"{len(urls)} NHL matches"
+        print(f"Found {count}.")
         print("=" * 100)
+        successful = True
         for url in urls:
-            analyze_single_match(url, config, home, away)
+            if not analyze_single_match(url, config, home, away):
+                successful = False
             print("=" * 100)
+        return successful
     else:
-        print(consts.ERROR_NO_UPCOMING_MATCHES_ALL)
+        print("No upcoming NHL matches with bookmaker odds were found.")
         print("=" * 100)
+        return True
 
 
-def analyze_single_match(url: str, config: Config, home: XGData, away: XGData) -> None:
+def analyze_single_match(url: str, config: Config, home: XGData, away: XGData) -> bool:
+    """Process one match and report expected integration failures.
+
+    Args:
+        url: BetExplorer match URL.
+        config: Validated application settings.
+        home: Cached home xG data.
+        away: Cached away xG data.
+
+    Returns:
+        Whether the match was analyzed successfully.
+    """
+    try:
+        return _analyze_single_match(url, config, home, away)
+    except (RequestException, Urllib3HTTPError, WebDriverException):
+        print("Unable to load NHL match data.")
+        return False
+    except OSError:
+        print("Unable to access application resources or save the report.")
+        return False
+
+
+def _analyze_single_match(url: str, config: Config, home: XGData, away: XGData) -> bool:
     """Scrape a match and apply the unchanged strength and market calculations.
 
     Args:
@@ -76,19 +140,23 @@ def analyze_single_match(url: str, config: Config, home: XGData, away: XGData) -
         home: Cached home xG data.
         away: Cached away xG data.
     """
-    print("Scraping...")
-    nhl_match = Scraper.get_main_data_for_match(url)
-    print(nhl_match)
+    print("Loading NHL match data...")
+    try:
+        nhl_match = Scraper.get_main_data_for_match(url)
+    except (ValueError, TypeError, IndexError, ParserError):
+        print("Unable to load NHL match data.")
+        return False
     if nhl_match is None:
-        print(consts.EXCEPTION_WITH_SCRAPING_WEB_PAGE)
-        return
+        print("Unable to load NHL match data.")
+        return False
+    print(nhl_match)
     if not (
         nhl_match.bookmaker_moneyline is not None
         or nhl_match.bookmaker_handicaps
         or nhl_match.bookmaker_totals
     ):
-        print(consts.ERROR_NO_ANY_LINES_ODDS_FOR_MATCH)
-        return
+        print("No bookmaker odds are available for this NHL match.")
+        return False
 
     nhl_match.team_a.xgf, nhl_match.team_a.xga = home.get(nhl_match.team_a.name, (0.0, 0.0))
     nhl_match.team_b.xgf, nhl_match.team_b.xga = away.get(nhl_match.team_b.name, (0.0, 0.0))
@@ -98,64 +166,93 @@ def analyze_single_match(url: str, config: Config, home: XGData, away: XGData) -
         and nhl_match.team_b.xga > 0.0
         and nhl_match.team_b.xgf > 0.0
     ):
-        print("Calculating...")
+        print("Calculating model odds...")
         quality_home = calculate_quality(nhl_match.team_a.xgf, nhl_match.team_b.xga)
         quality_away = calculate_quality(nhl_match.team_b.xgf, nhl_match.team_a.xga)
-        print(f"Team quality: {quality_home} - {quality_away}")
+        print(f"Team strength: {quality_home} - {quality_away}")
         poisson = Poisson(quality_home, quality_away)
         analyze_match_odds(nhl_match, poisson, config)
+        return True
     else:
-        if not nhl_match.team_a.xgf and not nhl_match.team_a.xga:
-            print(consts.ERROR_NO_XG_DATA_FOR_HOME)
-        if not nhl_match.team_b.xga and not nhl_match.team_b.xgf:
-            print(consts.ERROR_NO_XG_DATA_FOR_AWAY)
+        if nhl_match.team_a.xgf <= 0 or nhl_match.team_a.xga <= 0:
+            print("Insufficient xG data for the home team.")
+        if nhl_match.team_b.xgf <= 0 or nhl_match.team_b.xga <= 0:
+            print("Insufficient xG data for the away team.")
+    return False
 
 
-def main() -> None:
-    """Load configuration once and run the existing interactive menu."""
+def _is_match_url(url: str) -> bool:
+    """Check the scheme, BetExplorer hostname and nonempty NHL match path."""
+    try:
+        parsed = urlsplit(url)
+        prefix = consts.NHL_MATCH_PATH_PREFIX
+        return (
+            parsed.scheme in ("http", "https")
+            and parsed.hostname in consts.BETEXPLORER_HOSTNAMES
+            and parsed.path.startswith(prefix)
+            and bool(parsed.path.removeprefix(prefix).strip("/"))
+        )
+    except ValueError:
+        return False
+
+
+def main() -> int:
+    """Load configuration once and run the existing interactive menu.
+
+    Returns:
+        Zero on success, or one if any requested operation failed.
+    """
     config = load_config()
+    status = 0
     home: XGData | None = None
     away: XGData | None = None
-    print("Welcome to poisson_odds Demo!")
+    print("Welcome to Poisson Odds Demo!")
     print("=" * 100)
-    use_proxy = input("Do you want to use proxy to get xG data? Y/N: ").lower() == "y"
+    use_proxy = input("Use a proxy to load xG data? (Y/N): ").lower() == "y"
     while True:
         print("=" * 100)
-        print("""Choose the next:
-        1 - To analyze all upcoming matches.
-        2 - To analyze a single match by a URL.
-        or another symbol to exit.""")
-        choice = input("Your choice = ")
+        print("""Choose an option:
+        1 - Analyze all upcoming NHL matches.
+        2 - Analyze an NHL match by URL.
+        Enter any other value to exit.""")
+        choice = input("Choice: ")
         if choice in ("1", "2"):
             if home is None or away is None:
                 try:
                     home, away = asyncio.run(load_xgs(config, use_proxy))
-                except RequestsConnectionError:
-                    print(consts.EXCEPTION_WITH_SCRAPING_WEB_PAGE)
-                    return
+                except (RequestException, Urllib3HTTPError, ValueError, IndexError, ParserError):
+                    print("Unable to load xG data.")
+                    return 1
             if choice == "1":
-                analyze_all_matches(config, home, away)
+                if not analyze_all_matches(config, home, away):
+                    status = 1
             else:
                 print("=" * 100)
-                url = input("Write a URL of match: ")
+                url = input("NHL match URL: ")
                 print("=" * 100)
-                if consts.NHL_LEAGUE in url:
-                    analyze_single_match(url, config, home, away)
+                if _is_match_url(url):
+                    if not analyze_single_match(url, config, home, away):
+                        status = 1
                 else:
-                    print(consts.ERROR_WRONG_URL)
+                    print("Invalid URL. Enter an NHL match URL from BetExplorer.")
+                    status = 1
                 print("=" * 100)
         else:
             print("=" * 100)
-            print("Bye Bye!")
-            break
+            print("Goodbye!")
+            return status
 
 
-def run() -> None:
-    """Run the CLI with the legacy error message and pause before exiting."""
+def run() -> int:
+    """Run the interactive CLI and return a process exit status.
+
+    Returns:
+        Zero on success, or one for configuration or application failures.
+    """
     try:
-        main()
+        return main()
     except ConfigurationError as exc:
-        print(f"Invalid environment configuration: {exc}")
+        print(f"Invalid configuration: {exc}")
     except Exception as exc:
-        print("Something is going wrong: " + str(exc))
-    input("Press any button to exit...")
+        print("Application error: " + str(exc))
+    return 1

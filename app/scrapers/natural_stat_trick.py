@@ -38,7 +38,9 @@ async def get_xg_data_for_all_teams(
     teams: XGData = {}
     if use_proxy:
         if not config.proxy:
-            raise ConfigurationError("Set PROXY in .env or answer N to the proxy prompt.")
+            raise ConfigurationError(
+                "Set the PROXY environment variable or enter N at the proxy prompt."
+            )
         asession.proxies.update({"https": config.proxy})
 
     header = {"User-agent": consts.USER_AGENT_SHORT}
