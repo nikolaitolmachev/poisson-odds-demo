@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from app import constants as consts
-
 if TYPE_CHECKING:
     from collections.abc import Callable
     from typing import TypeVar
@@ -19,24 +17,21 @@ if TYPE_CHECKING:
     TwoWayMarket = TypeVar("TwoWayMarket", BookmakerHandicap, BookmakerTotal)
 
 
-def calculate_quality(xgf_team: float, xga_opponent: float) -> float:
-    """Calculate team strength from the team and opponent xG values.
+def calculate_quality_mean(xgf_team: float, xga_opponent: float) -> float:
+    """Calculate team strength using the arithmetic mean of the two xG values.
 
     Args:
         xgf_team: Venue-specific expected goals for the team.
         xga_opponent: Venue-specific expected goals against its opponent.
 
     Returns:
-        Team strength rounded to three decimal places.
+        Arithmetic mean rounded to three decimal places.
 
     Notes:
-        Inputs are not validated. Positive xG can produce a negative parameter;
-        NaN and infinity can propagate. The result is not checked for use in a Poisson model.
+        Inputs are not validated. Negative values, NaN, and infinity can propagate.
+        The result is not checked for use in a Poisson model.
     """
-    quality = (
-        (consts.XG_SCALE_FACTOR * xgf_team + consts.XG_OFFSET)
-        * (consts.XG_SCALE_FACTOR * xga_opponent + consts.XG_OFFSET)
-    ) - 1
+    quality = (xgf_team + xga_opponent) / 2
 
     return round(quality, 3)
 

@@ -28,7 +28,3 @@ USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
 )
-
-# Model parameters
-XG_SCALE_FACTOR = 0.75
-XG_OFFSET = 0.05

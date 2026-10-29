@@ -14,7 +14,7 @@ from requests_html import AsyncHTMLSession
 from urllib3.exceptions import HTTPError as Urllib3HTTPError
 
 from app import constants as consts
-from app.analysis import analyze_match_odds, calculate_quality
+from app.analysis import analyze_match_odds, calculate_quality_mean
 from app.cache import read_xg_cache, save_xg_cache
 from app.config import ConfigurationError, load_config
 from app.scrapers.betexplorer import BetExplorerScraper
@@ -194,8 +194,11 @@ def _analyze_single_match(
         and nhl_match.team_b.xgf > 0.0
     ):
         print("Calculating model odds...")
-        quality_home = calculate_quality(nhl_match.team_a.xgf, nhl_match.team_b.xga)
-        quality_away = calculate_quality(nhl_match.team_b.xgf, nhl_match.team_a.xga)
+
+        # TODO: change strategy here
+        quality_home = calculate_quality_mean(nhl_match.team_a.xgf, nhl_match.team_b.xga)
+        quality_away = calculate_quality_mean(nhl_match.team_b.xgf, nhl_match.team_a.xga)
+
         print(f"Team strength: {quality_home} - {quality_away}")
         poisson = Poisson(quality_home, quality_away)
         analyze_match_odds(nhl_match, poisson, config)
