@@ -1,4 +1,4 @@
-"""Fetch and validate venue-specific Natural Stat Trick xG statistics."""
+"""Fetch venue-specific Natural Stat Trick xGF/60 and xGA/60 for 5-on-5 play."""
 
 from __future__ import annotations
 
@@ -88,7 +88,18 @@ async def get_xg_data_for_all_teams(
     side: Literal["home", "away"] = "home",
     use_proxy: bool = False,
 ) -> XGData:
-    """Fetch home or away xG data without changing shared HTTP session settings.
+    """Fetch home or away xG rates across all game situations.
+
+    Note:
+        All Strengths includes special teams, empty-net situations, and
+        overtime. These rates are not restricted to regulation time.
+
+        To approximate regulation-only rates, retrieve raw xGF, xGA, and
+        time on ice (rate=n) for both All Strengths and 3v3, subtract
+        the 3v3 values, and recalculate the rates per 60 minutes.
+
+        This does not fully exclude overtime, since overtime can also
+        include other manpower situations.
 
     Args:
         asession: HTTP session owned by the caller.
@@ -97,8 +108,8 @@ async def get_xg_data_for_all_teams(
         use_proxy: Whether to apply the configured proxy to this request.
 
     Returns:
-        Source team names mapped to (xgf, xga) pairs for teams meeting the
-        minimum number of games.
+        Source team names mapped to (xgf, xga) pairs of xGF/60 and xGA/60
+        rates for teams meeting the minimum number of games.
         Use normalize_team_names() to align team names with BetExplorer.
 
     Raises:

@@ -19,7 +19,7 @@ MINIMAL_ODDS_TO_GET_LINE = 1.30
 
 # Natural Stat Trick
 XG_SITE_NHL = (
-    "https://www.naturalstattrick.com/teamtable.php?sit=5v5&score=all&rate=y&team=all&loc="
+    "https://www.naturalstattrick.com/teamtable.php?sit=all&score=all&rate=y&team=all&loc="
 )
 XG_REFERER = "https://www.naturalstattrick.com/teamtable.php"
 
