@@ -18,8 +18,11 @@ BOOKMAKERS = (
 MINIMAL_ODDS_TO_GET_LINE = 1.30
 
 # Natural Stat Trick
-XG_SITE_NHL = (
+XG_SITE_NHL_RATES = (
     "https://www.naturalstattrick.com/teamtable.php?sit=all&score=all&rate=y&team=all&loc="
+)
+XG_SITE_NHL_RAW = (
+    "https://www.naturalstattrick.com/teamtable.php?sit=all&score=all&rate=n&team=all&loc="
 )
 XG_REFERER = "https://www.naturalstattrick.com/teamtable.php"
 

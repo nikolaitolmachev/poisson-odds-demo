@@ -26,7 +26,9 @@ class Team:
 
     def __str__(self) -> str:
         """Return the team name, including xG when both values are nonzero."""
-        return f"{self.name} ({self.xgf}|{self.xga})" if self.xgf and self.xga else f"{self.name}"
+        if self.xgf and self.xga:
+            return f"{self.name} ({self.xgf:.2f}|{self.xga:.2f})"
+        return self.name
 
 
 @dataclass(eq=False)

@@ -28,11 +28,13 @@ class XGCache:
         retrieved_at: Original retrieval time in UTC.
         home: Home xG pairs keyed by normalized team name.
         away: Away xG pairs keyed by normalized team name.
+        league_averages: TOI-weighted league xGF/60 baselines for home and away.
     """
 
     retrieved_at: datetime
     home: XGData
     away: XGData
+    league_averages: dict[str, float]
 
     def is_fresh(self, now: datetime) -> bool:
         """Return whether the snapshot is less than CACHE_TTL_HOURS hours old.
@@ -68,6 +70,25 @@ def _validate_dataset(data: object) -> XGData | None:
     return result
 
 
+def _validate_league_averages(data: object) -> dict[str, float] | None:
+    """Require both finite, nonnegative venue baselines without accepting booleans."""
+    if not isinstance(data, dict):
+        return None
+    result: dict[str, float] = {}
+    for side in ("home", "away"):
+        value = data.get(side)
+        if type(value) not in (int, float):
+            return None
+        try:
+            value = float(value)
+        except OverflowError:
+            return None
+        if not math.isfinite(value) or value < 0:
+            return None
+        result[side] = value
+    return result
+
+
 def read_xg_cache(minimal_matches_to_count: int) -> XGCache | None:
     """Read a usable snapshot, including expired data for possible fallback.
 
@@ -76,7 +97,7 @@ def read_xg_cache(minimal_matches_to_count: int) -> XGCache | None:
 
     Returns:
         A validated snapshot, or None if the data is unreadable, invalid, or
-        uses a different minimum number of games.
+        uses a different minimum number of games, or lacks valid league baselines.
     """
     path = _application_directory() / CACHE_FILENAME
     try:
@@ -102,12 +123,15 @@ def read_xg_cache(minimal_matches_to_count: int) -> XGCache | None:
         return None
     home = _validate_dataset(payload.get("home"))
     away = _validate_dataset(payload.get("away"))
-    if home is None or away is None:
+    league_averages = _validate_league_averages(payload.get("league_averages"))
+    if home is None or away is None or league_averages is None:
         return None
-    return XGCache(retrieved_at, home, away)
+    return XGCache(retrieved_at, home, away, league_averages)
 
 
-def save_xg_cache(home: XGData, away: XGData, minimal_matches_to_count: int) -> None:
+def save_xg_cache(
+    home: XGData, away: XGData, minimal_matches_to_count: int, league_averages: dict[str, float]
+) -> None:
     """Atomically save complete, valid xG data in the application directory.
 
     Invalid datasets are not cached. No parent directories are created.
@@ -117,12 +141,17 @@ def save_xg_cache(home: XGData, away: XGData, minimal_matches_to_count: int) -> 
         home: Home xG pairs after team-name normalization.
         away: Away xG pairs after team-name normalization.
         minimal_matches_to_count: Minimum number of games used to filter both datasets.
+        league_averages: Complete home and away baselines from the same retrieval.
 
     Raises:
         OSError: Cache creation, writing, or replacement failed. The caller may continue
             using the freshly retrieved data.
     """
-    if _validate_dataset(home) is None or _validate_dataset(away) is None:
+    if (
+        _validate_dataset(home) is None
+        or _validate_dataset(away) is None
+        or _validate_league_averages(league_averages) is None
+    ):
         return
     path = _application_directory() / CACHE_FILENAME
     payload = {
@@ -130,6 +159,7 @@ def save_xg_cache(home: XGData, away: XGData, minimal_matches_to_count: int) -> 
         "minimal_matches_to_count": minimal_matches_to_count,
         "home": home,
         "away": away,
+        "league_averages": league_averages,
     }
     temporary_path: Path | None = None
     try:

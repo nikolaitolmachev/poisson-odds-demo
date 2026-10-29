@@ -17,6 +17,11 @@ if TYPE_CHECKING:
     TwoWayMarket = TypeVar("TwoWayMarket", BookmakerHandicap, BookmakerTotal)
 
 
+#####################################################################################
+# Team strength calculations
+#####################################################################################
+
+
 def calculate_quality_mean(xgf_team: float, xga_opponent: float) -> float:
     """Calculate team strength using the arithmetic mean of the two xG values.
 
@@ -31,9 +36,38 @@ def calculate_quality_mean(xgf_team: float, xga_opponent: float) -> float:
         Inputs are not validated. Negative values, NaN, and infinity can propagate.
         The result is not checked for use in a Poisson model.
     """
-    quality = (xgf_team + xga_opponent) / 2
+    return (xgf_team + xga_opponent) / 2
 
-    return round(quality, 3)
+
+def calculate_quality_normalized(
+    xgf_team: float,
+    xga_opponent: float,
+    league_average: float,
+) -> float:
+    """Calculate team strength using league-normalized attack and defense.
+
+    Args:
+        xgf_team: Venue-specific expected goals for the team per 60 minutes.
+        xga_opponent: Venue-specific expected goals against its opponent per 60 minutes.
+        league_average: League xGF/60 baseline for the scoring team's venue.
+            All inputs must cover the same period and game situations.
+
+    Returns:
+        Estimated xG per 60 minutes without rounding.
+
+    Raises:
+        ZeroDivisionError: The league baseline is zero.
+
+    Notes:
+        Inputs are not validated. Negative values, NaN, and infinity can propagate.
+        The result is not checked for use in a Poisson model.
+    """
+    return xgf_team * xga_opponent / league_average
+
+
+#####################################################################################
+# Odds comparison and value analysis
+#####################################################################################
 
 
 def calculate_difference_between_odds(user_odds: float, bookmaker_odds: float) -> float:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
@@ -14,26 +15,36 @@ from requests_html import AsyncHTMLSession
 from urllib3.exceptions import HTTPError as Urllib3HTTPError
 
 from app import constants as consts
-from app.analysis import analyze_match_odds, calculate_quality_mean
-from app.cache import read_xg_cache, save_xg_cache
+from app.analysis import (
+    analyze_match_odds,
+    calculate_quality_mean,
+    calculate_quality_normalized,
+)
+from app.cache import XGCache, read_xg_cache, save_xg_cache
 from app.config import ConfigurationError, load_config
 from app.scrapers.betexplorer import BetExplorerScraper
-from app.scrapers.natural_stat_trick import get_xg_data_for_all_teams, normalize_team_names
+from app.scrapers.natural_stat_trick import (
+    get_league_average_xg,
+    get_xg_data_for_all_teams,
+    normalize_team_names,
+)
 
 if TYPE_CHECKING:
+    from typing import Literal
+
     from app.config import Config
     from app.scrapers.natural_stat_trick import XGData
 
 
-async def load_xgs(config: Config, use_proxy: bool) -> tuple[XGData, XGData]:
-    """Load cached xG data or refresh both datasets, using stale data if needed.
+async def load_xgs(config: Config, use_proxy: bool) -> XGCache:
+    """Load cached xG data or refresh team rates and league baselines together.
 
     Args:
-        config: Application settings shared by both requests.
+        config: Application settings shared by all four requests.
         use_proxy: Whether the user selected proxy use.
 
     Returns:
-        Home and away xG dictionaries with normalized team names.
+        A complete snapshot with normalized home and away xG and league baselines.
 
     Raises:
         ConfigurationError: Proxy use was requested without a configured URL.
@@ -42,7 +53,7 @@ async def load_xgs(config: Config, use_proxy: bool) -> tuple[XGData, XGData]:
     """
     cached = read_xg_cache(config.minimal_matches_to_count)
     if cached is not None and cached.is_fresh(datetime.now(timezone.utc)):
-        return cached.home, cached.away
+        return cached
     if use_proxy and not config.proxy:
         raise ConfigurationError(
             "Set the PROXY environment variable or enter N at the proxy prompt."
@@ -55,12 +66,21 @@ async def load_xgs(config: Config, use_proxy: bool) -> tuple[XGData, XGData]:
         away_task = asyncio.create_task(
             get_xg_data_for_all_teams(session, config, side="away", use_proxy=use_proxy)
         )
+        home_average_task = asyncio.create_task(
+            get_league_average_xg(session, config, use_proxy=use_proxy)
+        )
+        away_average_task = asyncio.create_task(
+            get_league_average_xg(session, config, side="away", use_proxy=use_proxy)
+        )
+        tasks = (home_task, away_task, home_average_task, away_average_task)
         try:
-            home, away = await asyncio.gather(home_task, away_task)
+            home, away, mu_home, mu_away = await asyncio.gather(
+                home_task, away_task, home_average_task, away_average_task
+            )
         finally:
-            for task in (home_task, away_task):
+            for task in tasks:
                 task.cancel()
-            await asyncio.gather(home_task, away_task, return_exceptions=True)
+            await asyncio.gather(*tasks, return_exceptions=True)
             await session.close()
         if not home or not away:
             raise ValueError("Home or away xG data is missing.")
@@ -73,23 +93,33 @@ async def load_xgs(config: Config, use_proxy: bool) -> tuple[XGData, XGData]:
             "Warning: Unable to refresh xG data. Using cached data retrieved at "
             f"{cached.retrieved_at.isoformat()} (UTC)."
         )
-        return cached.home, cached.away
+        return cached
     home = normalize_team_names(home)
     away = normalize_team_names(away)
+    snapshot = XGCache(datetime.now(timezone.utc), home, away, {"home": mu_home, "away": mu_away})
     try:
-        save_xg_cache(home, away, config.minimal_matches_to_count)
+        save_xg_cache(home, away, config.minimal_matches_to_count, snapshot.league_averages)
     except OSError:
         print("Warning: Unable to save xG cache. Continuing with fresh data.")
-    return home, away
+    return snapshot
 
 
-def analyze_all_matches(config: Config, home: XGData, away: XGData) -> bool:
+def analyze_all_matches(
+    config: Config,
+    home: XGData,
+    away: XGData,
+    *,
+    strategy: Literal["mean", "normalized"] = "mean",
+    league_averages: dict[str, float] | None = None,
+) -> bool:
     """Analyze upcoming NHL matches one at a time.
 
     Args:
         config: Validated application settings.
         home: Cached home xG data.
         away: Cached away xG data.
+        strategy: Quality calculation selected for this run.
+        league_averages: Home and away baselines required by the normalized strategy.
 
     Returns:
         True if every match was processed successfully or no matches were found.
@@ -112,7 +142,15 @@ def analyze_all_matches(config: Config, home: XGData, away: XGData) -> bool:
             print("=" * 100)
             successful = True
             for url in urls:
-                if not analyze_single_match(url, config, home, away, scraper=scraper):
+                if not analyze_single_match(
+                    url,
+                    config,
+                    home,
+                    away,
+                    scraper=scraper,
+                    strategy=strategy,
+                    league_averages=league_averages,
+                ):
                     successful = False
                 print("=" * 100)
             return successful
@@ -128,6 +166,8 @@ def analyze_single_match(
     away: XGData,
     *,
     scraper: BetExplorerScraper | None = None,
+    strategy: Literal["mean", "normalized"] = "mean",
+    league_averages: dict[str, float] | None = None,
 ) -> bool:
     """Analyze one NHL match and report expected scraping or file errors.
 
@@ -136,6 +176,8 @@ def analyze_single_match(
         config: Validated application settings.
         home: Cached home xG data.
         away: Cached away xG data.
+        strategy: Quality calculation selected for this run.
+        league_averages: Home and away baselines required by the normalized strategy.
         scraper: Shared scraper for all-matches mode. If omitted, a scraper is
             created and closed for this operation.
 
@@ -145,8 +187,24 @@ def analyze_single_match(
     try:
         if scraper is None:
             with BetExplorerScraper() as owned_scraper:
-                return _analyze_single_match(url, config, home, away, owned_scraper)
-        return _analyze_single_match(url, config, home, away, scraper)
+                return _analyze_single_match(
+                    url,
+                    config,
+                    home,
+                    away,
+                    owned_scraper,
+                    strategy=strategy,
+                    league_averages=league_averages,
+                )
+        return _analyze_single_match(
+            url,
+            config,
+            home,
+            away,
+            scraper,
+            strategy=strategy,
+            league_averages=league_averages,
+        )
     except (RequestException, Urllib3HTTPError):
         print("Unable to load NHL match data.")
         return False
@@ -156,7 +214,14 @@ def analyze_single_match(
 
 
 def _analyze_single_match(
-    url: str, config: Config, home: XGData, away: XGData, scraper: BetExplorerScraper
+    url: str,
+    config: Config,
+    home: XGData,
+    away: XGData,
+    scraper: BetExplorerScraper,
+    *,
+    strategy: Literal["mean", "normalized"] = "mean",
+    league_averages: dict[str, float] | None = None,
 ) -> bool:
     """Retrieve an NHL match, calculate team strength, and compare market odds.
 
@@ -165,6 +230,8 @@ def _analyze_single_match(
         config: Validated application settings.
         home: Cached home xG data.
         away: Cached away xG data.
+        strategy: Quality calculation selected for this run.
+        league_averages: Home and away baselines required by the normalized strategy.
         scraper: HTTP scraper owned by the caller.
     """
     print("Loading NHL match data...")
@@ -195,11 +262,25 @@ def _analyze_single_match(
     ):
         print("Calculating model odds...")
 
-        # TODO: change strategy here
-        quality_home = calculate_quality_mean(nhl_match.team_a.xgf, nhl_match.team_b.xga)
-        quality_away = calculate_quality_mean(nhl_match.team_b.xgf, nhl_match.team_a.xga)
+        if strategy == "normalized":
+            if league_averages is None or any(
+                not math.isfinite(league_averages.get(side, 0.0))
+                or league_averages.get(side, 0.0) <= 0
+                for side in ("home", "away")
+            ):
+                print("Valid league-average xG data is required for the Normalized strategy.")
+                return False
+            quality_home = calculate_quality_normalized(
+                nhl_match.team_a.xgf, nhl_match.team_b.xga, league_averages["home"]
+            )
+            quality_away = calculate_quality_normalized(
+                nhl_match.team_b.xgf, nhl_match.team_a.xga, league_averages["away"]
+            )
+        else:
+            quality_home = calculate_quality_mean(nhl_match.team_a.xgf, nhl_match.team_b.xga)
+            quality_away = calculate_quality_mean(nhl_match.team_b.xgf, nhl_match.team_a.xga)
 
-        print(f"Team strength: {quality_home} - {quality_away}")
+        print(f"Expected goals: {quality_home:.3f} - {quality_away:.3f}")
         poisson = Poisson(quality_home, quality_away)
         analyze_match_odds(nhl_match, poisson, config)
         return True
@@ -234,34 +315,69 @@ def main() -> int:
     """
     config = load_config()
     status = 0
-    home: XGData | None = None
-    away: XGData | None = None
+    snapshot: XGCache | None = None
     print("Welcome to Poisson Odds Demo!")
     print("=" * 100)
     use_proxy = input("Use a proxy to load xG data? (Y/N): ").lower() == "y"
     while True:
         print("=" * 100)
+        print("""Select quality calculation strategy:
+    1 - Mean (arithmetic average, default).
+    2 - Normalized (league-adjusted).
+    0 - Exit.""")
+        selection = input("Choice: ").strip()
+        if selection == "0":
+            print("=" * 100)
+            print("Goodbye!")
+            return 0
+        if selection in ("", "1", "2"):
+            break
+        print("Invalid quality calculation strategy.")
+    strategy: Literal["mean", "normalized"]
+    if selection == "2":
+        strategy = "normalized"
+    else:
+        strategy = "mean"
+    strategy_name = (
+        "Normalized (league-adjusted)" if strategy == "normalized" else "Mean (arithmetic average)"
+    )
+    print(f"Quality calculation strategy: {strategy_name}")
+    while True:
+        print("=" * 100)
         print("""Choose an option:
-        1 - Analyze all upcoming NHL matches.
-        2 - Analyze an NHL match by URL.
-        Enter any other value to exit.""")
+    1 - Analyze all upcoming NHL matches.
+    2 - Analyze an NHL match by URL.
+    Enter any other value to exit.""")
         choice = input("Choice: ")
         if choice in ("1", "2"):
-            if home is None or away is None:
+            if snapshot is None:
                 try:
-                    home, away = asyncio.run(load_xgs(config, use_proxy))
+                    snapshot = asyncio.run(load_xgs(config, use_proxy))
                 except (RequestException, Urllib3HTTPError, ValueError, IndexError, ParserError):
                     print("Unable to load xG data.")
                     return 1
             if choice == "1":
-                if not analyze_all_matches(config, home, away):
+                if not analyze_all_matches(
+                    config,
+                    snapshot.home,
+                    snapshot.away,
+                    strategy=strategy,
+                    league_averages=snapshot.league_averages,
+                ):
                     status = 1
             else:
                 print("=" * 100)
                 url = input("NHL match URL: ")
                 print("=" * 100)
                 if _is_match_url(url):
-                    if not analyze_single_match(url, config, home, away):
+                    if not analyze_single_match(
+                        url,
+                        config,
+                        snapshot.home,
+                        snapshot.away,
+                        strategy=strategy,
+                        league_averages=snapshot.league_averages,
+                    ):
                         status = 1
                 else:
                     print("Invalid URL. Enter an NHL match URL from BetExplorer.")
