@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import ROUND_CEILING, Decimal
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -63,6 +64,45 @@ def calculate_quality_normalized(
         The result is not checked for use in a Poisson model.
     """
     return xgf_team * xga_opponent / league_average
+
+
+#####################################################################################
+# Minimum acceptable bookmaker odds
+#####################################################################################
+
+
+def calculate_minimum_bookmaker_odds(model_odds: float, threshold: int) -> Decimal:
+    """Calculate the lowest two-decimal odds meeting the existing value threshold.
+
+    Args:
+        model_odds: Positive, finite decimal odds produced by the model.
+        threshold: Nonnegative inclusive threshold for the percentage difference.
+
+    Returns:
+        Minimum odds rounded upward to cents. The existing three-decimal
+        percentage rounding is included, with boundary ties checked using
+        calculate_difference_between_odds().
+    """
+    cent = Decimal("0.01")
+    # A difference just below the threshold can round up and qualify.
+    minimum = (
+        Decimal(str(model_odds)) * (1 + (Decimal(threshold) - Decimal("0.0005")) / 100)
+    ).quantize(cent, rounding=ROUND_CEILING)
+    # Match Python's float and round() behavior at the boundary exactly.
+    while calculate_difference_between_odds(model_odds, float(minimum)) < threshold:
+        minimum += cent
+    while calculate_difference_between_odds(model_odds, float(minimum - cent)) >= threshold:
+        minimum -= cent
+    return minimum
+
+
+def _minimum_odds_message(selections: tuple[tuple[str, float, float], ...], threshold: int) -> str:
+    """Format minimum odds once for each qualifying selection in market order."""
+    return "".join(
+        f"Minimum odds ({label}): @{calculate_minimum_bookmaker_odds(odds, threshold):.2f}\n"
+        for label, odds, difference in selections
+        if difference >= threshold
+    )
 
 
 #####################################################################################
@@ -129,7 +169,18 @@ def _analyze_moneyline(
         f"| Odds difference = {home!s:>9} % / {draw!s:>9} % / {away!s:>9} %"
     )
     print(message)
-    return message + "\n" if qualifies else ""
+    if not qualifies:
+        return ""
+    minimum_odds = _minimum_odds_message(
+        (
+            ("1X2, 1", model.odds_home, home),
+            ("1X2, X", model.odds_draw, draw),
+            ("1X2, 2", model.odds_away, away),
+        ),
+        threshold,
+    )
+    print(minimum_odds, end="")
+    return message + "\n" + minimum_odds
 
 
 def _analyze_two_way_lines(
@@ -137,6 +188,8 @@ def _analyze_two_way_lines(
     model_lines: dict[float, TwoWayMarket],
     threshold: int,
     get_odds: Callable[[TwoWayMarket], tuple[float, float]],
+    market_name: str,
+    sides: tuple[str, str],
 ) -> str:
     """Compare two-outcome lines in bookmaker order and collect qualifying reports.
 
@@ -145,6 +198,8 @@ def _analyze_two_way_lines(
         model_lines: Corresponding model markets keyed by line.
         threshold: Inclusive threshold for rounded percentage differences.
         get_odds: Extract both odds in home/away or over/under order.
+        market_name: Market label for the minimum odds messages.
+        sides: Selection labels in the same order as get_odds().
 
     Returns:
         Qualifying comparisons with trailing newlines; unavailable lines are skipped.
@@ -167,7 +222,15 @@ def _analyze_two_way_lines(
         )
         print(message)
         if qualifies:
-            messages.append(message + "\n")
+            minimum_odds = _minimum_odds_message(
+                (
+                    (f"{market_name} {bookmaker.line}, {sides[0]}", model_first, first),
+                    (f"{market_name} {bookmaker.line}, {sides[1]}", model_second, second),
+                ),
+                threshold,
+            )
+            print(minimum_odds, end="")
+            messages.append(message + "\n" + minimum_odds)
     return "".join(messages)
 
 
@@ -193,6 +256,8 @@ def _analyze_handicaps(
         user_model.calculate_handicap_odds_by_poisson(),
         threshold,
         lambda line: (line.odds_home, line.odds_away),
+        "Handicap",
+        ("home", "away"),
     )
 
 
@@ -217,6 +282,8 @@ def _analyze_totals(bookmakers: list[BookmakerTotal], user_model: Poisson, thres
         user_model.calculate_total_odds_by_poisson(),
         threshold,
         lambda line: (line.odds_over, line.odds_under),
+        "Total",
+        ("Over", "Under"),
     )
 
 

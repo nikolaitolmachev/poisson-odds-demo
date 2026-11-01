@@ -44,3 +44,7 @@ Img/
 Services/
 Value/
 tests/
+
+# Experiments
+experiments/
+odds/
