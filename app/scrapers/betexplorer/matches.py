@@ -124,7 +124,9 @@ def parse_match_metadata(document: str) -> MatchMetadata:
         document: BetExplorer match page HTML.
 
     Returns:
-        Date, home team, and away team from the match page.
+        Date, home team, and away team from the match page. JSON-LD dates are
+        converted to the system's local timezone; HTML fallback dates are used
+        as supplied by the page.
 
     Raises:
         ValueError: The document is empty, not HTML, or lacks usable metadata.

@@ -22,12 +22,14 @@ CACHE_FILENAME = "xg_cache.json"
 
 @dataclass(frozen=True)
 class XGCache:
-    """A complete, validated xG snapshot.
+    """Home and away xG rates, league baselines, and their retrieval time.
+
+    Cache loading and saving validate the data; direct construction does not.
 
     Attributes:
         retrieved_at: Original retrieval time in UTC.
-        home: Home xG pairs keyed by normalized team name.
-        away: Away xG pairs keyed by normalized team name.
+        home: Home (xGF/60, xGA/60) pairs keyed by normalized team name.
+        away: Away (xGF/60, xGA/60) pairs keyed by normalized team name.
         league_averages: TOI-weighted league xGF/60 baselines for home and away.
     """
 

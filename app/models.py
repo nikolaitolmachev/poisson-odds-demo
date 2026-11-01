@@ -3,21 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from poisson_odds import BookmakerHandicap, BookmakerMoneyline, BookmakerTotal
 
 
 @dataclass(eq=False)
 class Team:
-    """A team and its venue-specific expected goals.
+    """A team and its venue-specific expected goals per 60 minutes.
 
     Attributes:
         name: Source team name.
-        xgf: Expected goals for; zero when not assigned.
-        xga: Expected goals against; zero when not assigned.
+        xgf: Expected goals for per 60 minutes; zero when not assigned.
+        xga: Expected goals against per 60 minutes; zero when not assigned.
     """
 
     name: str
@@ -25,7 +26,7 @@ class Team:
     xga: float = 0.0
 
     def __str__(self) -> str:
-        """Return the team name, including xG when both values are nonzero."""
+        """Return the team name, adding both nonzero xG rates with two decimal places."""
         if self.xgf and self.xga:
             return f"{self.name} ({self.xgf:.2f}|{self.xga:.2f})"
         return self.name

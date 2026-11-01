@@ -4,16 +4,20 @@ from __future__ import annotations
 
 import math
 from collections.abc import Awaitable
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, cast
 
 from lxml import html
 from requests_html import HTMLResponse
 
 from app import constants as consts
-from app.config import Config, ConfigurationError
+from app.config import ConfigurationError
 
 if TYPE_CHECKING:
+    from typing import Literal
+
     from requests_html import AsyncHTMLSession
+
+    from app.config import Config
 
 XGData = dict[str, tuple[float, float]]
 
@@ -25,7 +29,8 @@ def normalize_team_names(data: XGData) -> XGData:
         data: Team names mapped to xG pairs.
 
     Returns:
-        A new dictionary with the two known aliases replaced. The input is unchanged.
+        A new dictionary with St Louis Blues renamed to St. Louis Blues.
+        Other names and all xG values are unchanged. The input is not modified.
     """
     normalized = data.copy()
     for old_name, new_name in (("St Louis Blues", "St. Louis Blues"),):

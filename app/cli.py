@@ -39,17 +39,25 @@ if TYPE_CHECKING:
 async def load_xgs(config: Config, use_proxy: bool) -> XGCache:
     """Load cached xG data or refresh team rates and league baselines together.
 
+    A fresh cache avoids HTTP requests. If a refresh fails, a usable expired
+    cache is returned with a warning. Cache write failures do not discard
+    freshly retrieved data.
+
     Args:
         config: Application settings shared by all four requests.
         use_proxy: Whether the user selected proxy use.
 
     Returns:
-        A complete snapshot with normalized home and away xG and league baselines.
+        A complete snapshot of home and away xG rates and league baselines.
+        Newly retrieved team names are normalized before caching.
 
     Raises:
-        ConfigurationError: Proxy use was requested without a configured URL.
-        ValueError: Either venue returned no usable xG data.
-        RequestException: A statistics request failed.
+        ConfigurationError: A refresh requires a proxy but no URL is configured.
+        ValueError: Statistics are invalid or incomplete and no usable cache exists.
+        RequestException: A statistics request failed and no usable cache exists.
+        Urllib3HTTPError: The HTTP client failed and no usable cache exists.
+        OSError: Resource access or session cleanup failed and no usable cache exists.
+        ParserError: HTML parsing failed and no usable cache exists.
     """
     cached = read_xg_cache(config.minimal_matches_to_count)
     if cached is not None and cached.is_fresh(datetime.now(timezone.utc)):
@@ -116,8 +124,8 @@ def analyze_all_matches(
 
     Args:
         config: Validated application settings.
-        home: Cached home xG data.
-        away: Cached away xG data.
+        home: Home (xGF/60, xGA/60) pairs keyed by team name.
+        away: Away (xGF/60, xGA/60) pairs keyed by team name.
         strategy: Quality calculation selected for this run.
         league_averages: Home and away baselines required by the normalized strategy.
 
@@ -174,12 +182,12 @@ def analyze_single_match(
     Args:
         url: BetExplorer match URL.
         config: Validated application settings.
-        home: Cached home xG data.
-        away: Cached away xG data.
-        strategy: Quality calculation selected for this run.
-        league_averages: Home and away baselines required by the normalized strategy.
+        home: Home (xGF/60, xGA/60) pairs keyed by team name.
+        away: Away (xGF/60, xGA/60) pairs keyed by team name.
         scraper: Shared scraper for all-matches mode. If omitted, a scraper is
             created and closed for this operation.
+        strategy: Quality calculation selected for this run.
+        league_averages: Home and away baselines required by the normalized strategy.
 
     Returns:
         Whether the match was analyzed successfully.
@@ -223,16 +231,20 @@ def _analyze_single_match(
     strategy: Literal["mean", "normalized"] = "mean",
     league_averages: dict[str, float] | None = None,
 ) -> bool:
-    """Retrieve an NHL match, calculate team strength, and compare market odds.
+    """Retrieve an NHL match, estimate team scoring rates, and compare market odds.
 
     Args:
         url: BetExplorer match URL.
         config: Validated application settings.
-        home: Cached home xG data.
-        away: Cached away xG data.
+        home: Home (xGF/60, xGA/60) pairs keyed by team name.
+        away: Away (xGF/60, xGA/60) pairs keyed by team name.
+        scraper: HTTP scraper owned by the caller.
         strategy: Quality calculation selected for this run.
         league_averages: Home and away baselines required by the normalized strategy.
-        scraper: HTTP scraper owned by the caller.
+
+    Returns:
+        True after analysis, or False for invalid match data, missing bookmaker
+        markets, insufficient xG data, or unavailable normalized baselines.
     """
     print("Loading NHL match data...")
     try:
@@ -312,6 +324,9 @@ def main() -> int:
 
     Returns:
         Zero on success, or one if any requested operation failed.
+
+    Raises:
+        ConfigurationError: Application settings are invalid.
     """
     config = load_config()
     status = 0

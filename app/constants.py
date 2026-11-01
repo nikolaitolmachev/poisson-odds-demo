@@ -1,4 +1,4 @@
-"""Scraping URLs, bookmaker priorities, HTTP headers, and xG model parameters."""
+"""Scraping URLs, bookmaker priorities, odds filters, and the HTTP user agent."""
 
 # BetExplorer
 BETEXPLORER_BASE = "https://www.betexplorer.com"

@@ -53,7 +53,9 @@ def parse_handicaps(payload: str) -> dict[int, list[BookmakerHandicap]]:
         payload: BetExplorer odds endpoint response body.
 
     Returns:
-        Bookmaker IDs mapped to valid handicap lines in source order.
+        Bookmaker IDs mapped to whole- and half-goal handicap lines in source order.
+        Both odds must meet MINIMAL_ODDS_TO_GET_LINE. Malformed or inactive rows
+        are skipped; an empty dictionary means no rows qualify.
 
     Raises:
         ValueError: The payload is empty, is not valid JSON, or has no valid odds HTML.
@@ -72,7 +74,9 @@ def parse_totals(payload: str) -> dict[int, list[BookmakerTotal]]:
         payload: BetExplorer odds endpoint response body.
 
     Returns:
-        Bookmaker IDs mapped to valid over/under lines in source order.
+        Bookmaker IDs mapped to whole- and half-goal total lines in source order.
+        Both odds must meet MINIMAL_ODDS_TO_GET_LINE. Malformed or inactive rows
+        are skipped; an empty dictionary means no rows qualify.
 
     Raises:
         ValueError: The payload is empty, is not valid JSON, or has no valid odds HTML.

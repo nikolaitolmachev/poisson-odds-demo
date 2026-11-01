@@ -158,7 +158,8 @@ class BetExplorerScraper:
             url: Absolute BetExplorer NHL match URL.
 
         Returns:
-            Bookmaker IDs mapped to valid handicap lines in source order.
+            Bookmaker IDs mapped to whole- and half-goal handicap lines in source
+            order. Both odds must meet MINIMAL_ODDS_TO_GET_LINE. Empty if no rows qualify.
 
         Raises:
             requests.RequestException: The odds request failed.
@@ -173,7 +174,8 @@ class BetExplorerScraper:
             url: Absolute BetExplorer NHL match URL.
 
         Returns:
-            Bookmaker IDs mapped to valid over/under lines in source order.
+            Bookmaker IDs mapped to whole- and half-goal total lines in source
+            order. Both odds must meet MINIMAL_ODDS_TO_GET_LINE. Empty if no rows qualify.
 
         Raises:
             requests.RequestException: The odds request failed.

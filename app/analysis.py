@@ -1,4 +1,4 @@
-"""Calculate team strength and compare bookmaker odds with model odds."""
+"""Estimate team scoring rates and compare bookmaker odds with model odds."""
 
 from __future__ import annotations
 
@@ -24,14 +24,14 @@ if TYPE_CHECKING:
 
 
 def calculate_quality_mean(xgf_team: float, xga_opponent: float) -> float:
-    """Calculate team strength using the arithmetic mean of the two xG values.
+    """Estimate the team's xG/60 using the arithmetic mean of the two input rates.
 
     Args:
-        xgf_team: Venue-specific expected goals for the team.
-        xga_opponent: Venue-specific expected goals against its opponent.
+        xgf_team: Venue-specific expected goals for the team per 60 minutes.
+        xga_opponent: Venue-specific expected goals against its opponent per 60 minutes.
 
     Returns:
-        Arithmetic mean rounded to three decimal places.
+        Arithmetic mean of the two xG rates, without rounding.
 
     Notes:
         Inputs are not validated. Negative values, NaN, and infinity can propagate.
@@ -45,7 +45,7 @@ def calculate_quality_normalized(
     xga_opponent: float,
     league_average: float,
 ) -> float:
-    """Calculate team strength using league-normalized attack and defense.
+    """Estimate the team's xG/60 using league-normalized attack and defense.
 
     Args:
         xgf_team: Venue-specific expected goals for the team per 60 minutes.
@@ -79,9 +79,9 @@ def calculate_minimum_bookmaker_odds(model_odds: float, threshold: int) -> Decim
         threshold: Nonnegative inclusive threshold for the percentage difference.
 
     Returns:
-        Minimum odds rounded upward to cents. The existing three-decimal
-        percentage rounding is included, with boundary ties checked using
-        calculate_difference_between_odds().
+        Minimum qualifying odds as a Decimal with two fractional digits.
+        The existing three-decimal percentage rounding is included, with
+        boundary ties checked using calculate_difference_between_odds().
     """
     cent = Decimal("0.01")
     # A difference just below the threshold can round up and qualify.
@@ -151,7 +151,8 @@ def _analyze_moneyline(
         threshold: Inclusive threshold for rounded percentage differences.
 
     Returns:
-        The qualifying comparison with its trailing newline, or an empty string.
+        The qualifying comparison and minimum odds for each qualifying outcome,
+        with trailing newlines, or an empty string.
     """
     print("Comparing moneyline odds...")
     if bookmaker is None:
@@ -202,7 +203,8 @@ def _analyze_two_way_lines(
         sides: Selection labels in the same order as get_odds().
 
     Returns:
-        Qualifying comparisons with trailing newlines; unavailable lines are skipped.
+        Qualifying comparisons and minimum odds with trailing newlines.
+        Lines without corresponding model odds are skipped.
     """
     messages: list[str] = []
     for bookmaker in bookmakers:
@@ -245,7 +247,8 @@ def _analyze_handicaps(
         threshold: Inclusive threshold for rounded percentage differences.
 
     Returns:
-        Qualifying comparisons with trailing newlines; unavailable lines are skipped.
+        Qualifying comparisons and minimum odds with trailing newlines.
+        Lines without corresponding model odds are skipped.
     """
     print("Comparing handicap odds...")
     if not bookmakers:
@@ -270,7 +273,8 @@ def _analyze_totals(bookmakers: list[BookmakerTotal], user_model: Poisson, thres
         threshold: Inclusive threshold for rounded percentage differences.
 
     Returns:
-        Qualifying comparisons with trailing newlines; unavailable lines are skipped.
+        Qualifying comparisons and minimum odds with trailing newlines.
+        Lines without corresponding model odds are skipped.
     """
     print("Comparing total odds...")
     if not bookmakers:
@@ -295,7 +299,7 @@ def analyze_match_odds(nhl_match: NHLMatch, model: Poisson, config: Config) -> N
         model: Poisson model that provides moneyline, handicap, and total odds.
         config: Validated threshold and explicit output path.
     """
-    # Preserve the original property access before any headings, even without odds.
+    # Retrieve moneyline odds before printing any market comparisons.
     moneyline = model.moneyline
     threshold = config.model_value_difference
     message = "".join(
