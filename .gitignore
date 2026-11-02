@@ -37,14 +37,6 @@ dist/
 stats.txt
 xg_cache.json
 
-# temps
-legacy/
-Entities/
-Img/
-Services/
-Value/
-tests/
-
 # Experiments
 experiments/
 odds/
