@@ -1,0 +1,107 @@
+name: CI and Windows executable
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Linux checks (Python 3.12)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install application and development dependencies
+        run: python -m pip install ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Check formatting
+        run: ruff format --check .
+
+      - name: Run offline tests
+        run: pytest -q
+
+  windows-build:
+    name: Windows executable (Python 3.12)
+    needs: checks
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install application and executable-build dependencies
+        run: python -m pip install ".[build]"
+
+      - name: Build console executable
+        # requests-html needs fake-useragent's bundled JSON data, not Chromium.
+        run: >-
+          python -m PyInstaller --noconfirm --clean --onefile --console
+          --name poisson-odds-demo --icon assets/nhl.ico
+          --collect-data fake_useragent main.py
+
+      - name: Verify executable starts and exits without network requests
+        shell: python
+        run: |
+          import os
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          executable = Path("dist/poisson-odds-demo.exe").resolve()
+          if not executable.is_file():
+              raise SystemExit(f"Executable not found: {executable}")
+
+          environment = os.environ.copy()
+          environment.pop("PYTHONPATH", None)
+          environment.pop("PYTHONHOME", None)
+          with tempfile.TemporaryDirectory() as working_directory:
+              result = subprocess.run(
+                  [str(executable)],
+                  input="n\n0\n",
+                  capture_output=True,
+                  text=True,
+                  encoding="utf-8",
+                  errors="replace",
+                  cwd=working_directory,
+                  env=environment,
+                  timeout=30,
+              )
+
+          print(result.stdout)
+          print(result.stderr)
+          if result.returncode != 0:
+              raise SystemExit(f"Executable exited with status {result.returncode}")
+          for expected in (
+              "Welcome to Poisson Odds Demo!",
+              "Select quality calculation strategy:",
+              "Goodbye!",
+          ):
+              if expected not in result.stdout:
+                  raise SystemExit(f"Expected output not found: {expected}")
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v7
+        with:
+          name: poisson-odds-demo-windows
+          path: dist/poisson-odds-demo.exe
+          if-no-files-found: error
+          retention-days: 14

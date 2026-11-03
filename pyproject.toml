@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "poisson-odds-demo"
+version = "0.1.0"
+description = "Python CLI application for analyzing NHL match probabilities and comparing Poisson-based fair odds with bookmaker odds."
+# readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = [
+    "aiohttp==3.11.12",
+    "lxml==5.3.1",
+    "poisson-odds==0.2.0",
+    "requests-html==0.10.0",
+    "python-dotenv>=1.0,<2",
+    "requests[socks]>=2.27,<3",
+    "lxml-html-clean>=0.4,<1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "ruff>=0.9,<1", "build>=1.2,<2", "twine>=6,<7"]
+build = ["pyinstaller==6.12.0"]
+
+[project.scripts]
+poisson-odds-demo = "app.cli:run"
+
+[tool.setuptools.packages.find]
+include = ["app", "app.*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--strict-markers"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+include = ["app/**/*.py", "tests/**/*.py", "main.py", "pyproject.toml"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

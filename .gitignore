@@ -1,9 +1,43 @@
-Lib
-Scripts
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+.venv-win/
+venv/
 pyvenv.cfg
-.idea
-**/__pycache__/
-/build
-/dist
-/xGNHL.spec
-/xGNHL.exe
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# IDE settings
+.idea/
+.vscode/
+
+# Test coverage
+.coverage
+.coverage.*
+htmlcov/
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+
+# PyInstaller
+*.spec
+*.exe
+
+# Generated application data
+stats.txt
+xg_cache.json
+
+# Experiments
+experiments/
+odds/
